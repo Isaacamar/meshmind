@@ -107,6 +107,18 @@ public class GroupController {
         return ResponseEntity.ok(groups);
     }
 
+     @GetMapping("/{id}")
+    public ResponseEntity<GroupResponse> getGroup(@AuthenticationPrincipal UserDetails principal,
+                                                   @PathVariable UUID id) {
+        PeerGroup group = groupRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Group not found"));
+        User user = getUser(principal);
+        if (!memberRepository.existsByGroupAndUser(group, user)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not a member of this group");
+        }
+        return ResponseEntity.ok(GroupResponse.from(group));
+    }
+
     @GetMapping("/{id}/messages")
     public ResponseEntity<List<GroupMessageResponse>> getMessages(@AuthenticationPrincipal UserDetails principal,
                                                                    @PathVariable UUID id) {
