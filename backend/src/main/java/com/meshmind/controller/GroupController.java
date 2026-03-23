@@ -34,7 +34,7 @@ public class GroupController {
         group.setOwner(owner);
         group.setName(req.getName());
         group.setDescription(req.getDescription());
-        group.setPublic(req.isPublic());
+        group.setPublic(req.isPublicGroup());
         groupRepository.save(group);
 
         // Add owner as admin member

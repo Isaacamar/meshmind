@@ -130,6 +130,38 @@ export default function GroupChat({ group, model }: Props) {
     }
   }
 
+  // ── Manual AI trigger (solo testing / on-demand) ──────────────────────────
+  const askAi = async () => {
+    const text = input.trim()
+    if (!me || !model || aiThinking) return
+    setSending(true)
+    setInput('')
+
+    // Post the human message first (if there's input), then trigger AI
+    let currentMessages = messages
+    if (text) {
+      try {
+        const msg = await postGroupMessage(group.id, text)
+        currentMessages = [...messages, msg]
+        setMessages(currentMessages)
+        seenIds.current.add(msg.id)
+      } catch { /* ignore */ }
+    }
+
+    setSending(false)
+    setAiThinking(true)
+    try {
+      const result = await askLocalModel(me.id, me.username, model, currentMessages)
+      if (!result.skipped && result.content.trim()) {
+        const aiMsg = await postGroupMessage(group.id, result.content, true, model)
+        setMessages(prev => [...prev, aiMsg])
+        seenIds.current.add(aiMsg.id)
+      }
+    } catch { /* ignore */ } finally {
+      setAiThinking(false)
+    }
+  }
+
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }
   }
@@ -232,10 +264,18 @@ export default function GroupChat({ group, model }: Props) {
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={onKeyDown}
-          placeholder={`Message #${group.name}… (Enter to send)`}
+          placeholder={`Message #${group.name}… (Enter to send, Shift+Enter for newline)`}
           rows={1}
           disabled={sending}
         />
+        <button
+          className="gchat-ask-ai"
+          onClick={askAi}
+          disabled={sending || aiThinking}
+          title="Send message and ask your local AI to respond"
+        >
+          ⬡ AI
+        </button>
         <button className="gchat-send" onClick={send} disabled={sending || !input.trim()}>↑</button>
       </div>
     </div>

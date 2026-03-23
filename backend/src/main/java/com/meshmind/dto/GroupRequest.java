@@ -7,5 +7,5 @@ import lombok.Data;
 public class GroupRequest {
     @NotBlank private String name;
     private String description;
-    private boolean isPublic = false;
+    private boolean publicGroup = false;
 }

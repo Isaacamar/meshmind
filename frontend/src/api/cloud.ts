@@ -79,7 +79,7 @@ export async function getMyGroups(): Promise<Group[]> {
 }
 
 export async function createGroup(name: string, description: string, isPublic = false): Promise<Group> {
-  return req('POST', '/api/groups', { name, description, isPublic })
+  return req('POST', '/api/groups', { name, description, publicGroup: isPublic })
 }
 
 export async function inviteToGroup(groupId: string, username: string): Promise<void> {
