@@ -1,0 +1,133 @@
+.layout {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+}
+
+/* Sidebar */
+.sidebar {
+  width: 260px;
+  min-width: 260px;
+  background: #161616;
+  border-right: 1px solid #2a2a2a;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 12px;
+  gap: 12px;
+  overflow: hidden;
+}
+
+.sidebar-header {
+  padding: 4px 4px 10px;
+  border-bottom: 1px solid #2a2a2a;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.logo { font-size: 1.1rem; font-weight: 700; color: #7c6af7; letter-spacing: 0.5px; }
+
+.user-info { display: flex; align-items: center; justify-content: space-between; }
+.user-name { font-size: 0.8rem; color: #888; }
+.logout-btn {
+  background: none;
+  border: none;
+  color: #555;
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: color 0.15s;
+}
+.logout-btn:hover { color: #f88; }
+
+.ollama-warn {
+  background: #3a1a00;
+  border: 1px solid #7a3800;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 0.78rem;
+  color: #ffa040;
+  line-height: 1.6;
+}
+.ollama-warn code { font-size: 0.75rem; background: #1a0e00; padding: 1px 4px; border-radius: 3px; }
+
+.model-select { display: flex; flex-direction: column; gap: 4px; }
+.model-select label { font-size: 0.72rem; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
+.model-select select {
+  background: #222;
+  border: 1px solid #333;
+  color: #e8e8e8;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.new-chat-btn {
+  background: #7c6af7;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.new-chat-btn:hover { background: #6a58e5; }
+.new-chat-btn:disabled { background: #444; cursor: not-allowed; }
+
+.session-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+.session-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.1s;
+  position: relative;
+}
+.session-item:hover { background: #222; }
+.session-item.active { background: #27224a; }
+.session-title { flex: 1; font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.session-model { font-size: 0.7rem; color: #666; white-space: nowrap; }
+.delete-btn {
+  background: none; border: none; color: #555; font-size: 0.75rem;
+  cursor: pointer; padding: 2px 4px; border-radius: 3px; opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
+}
+.session-item:hover .delete-btn { opacity: 1; }
+.delete-btn:hover { color: #f66; }
+
+/* Main area */
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+/* Empty state */
+.empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  text-align: center;
+  padding: 40px;
+}
+.empty-icon { font-size: 3rem; color: #7c6af7; }
+.empty-state h2 { font-size: 1.8rem; font-weight: 700; }
+.empty-state p { color: #888; font-size: 0.95rem; max-width: 380px; line-height: 1.6; }
+.empty-state code { background: #1e1e1e; padding: 2px 6px; border-radius: 4px; font-size: 0.88rem; }
+.start-btn {
+  margin-top: 8px;
+  background: #7c6af7;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 12px 24px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.start-btn:hover { background: #6a58e5; }
+.hint { font-size: 0.85rem !important; }

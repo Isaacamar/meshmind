@@ -1,6 +1,6 @@
-version: "3.9"
-
 services:
+
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
   db:
     image: postgres:16
     restart: unless-stopped
@@ -12,12 +12,19 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U meshmind -d meshmind"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
+  # ── Spring Boot backend ──────────────────────────────────────────────────────
   backend:
     build: ./backend
     restart: unless-stopped
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/meshmind
       SPRING_DATASOURCE_USERNAME: meshmind
@@ -26,5 +33,28 @@ services:
     ports:
       - "8080:8080"
 
+  # ── OpenClaw FastAPI (local AI backend) ─────────────────────────────────────
+  openclaw:
+    build: ./openclaw
+    restart: unless-stopped
+    environment:
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      SQLITE_PATH: /data/openclaw.db
+    ports:
+      - "8000:8000"
+    volumes:
+      - openclaw_data:/data
+      - ./openclaw/app:/app/app
+
+  # ── React frontend ───────────────────────────────────────────────────────────
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - openclaw
+    ports:
+      - "3000:3000"
+
 volumes:
   postgres_data:
+  openclaw_data:
