@@ -66,11 +66,11 @@ The relay server passes encrypted blobs between peers. It cannot read message co
 
 | ID | Feature | Status |
 |---|---|---|
-| F1 | User registration, login, JWT auth, profile management | Planned |
+| F1 | User registration, login, JWT auth, profile management | In Progress |
 | F2 | Local AI chat interface (OpenClaw-based, already functional) | Done |
-| F3 | Node registry and online status heartbeat | Planned |
-| F4 | Peer groups — create, invite, member list | Planned |
-| F5 | Peer query routing via encrypted WebSocket relay | Planned |
+| F3 | Node registry and online status heartbeat | In Progress |
+| F4 | Peer groups — create, invite, member list | In Progress|
+| F5 | Peer query routing via encrypted WebSocket relay | Testing |
 | F6 | Node dashboard — hardware stats, peer status | Planned |
 | F7 | Agent mode — terminal/kernel integration, filesystem-aware AI | Roadmap |
 | F8 | Distributed knowledge sharing — peer vector sync (stretch) | Stretch |
