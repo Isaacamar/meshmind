@@ -176,8 +176,8 @@ This project tracks work via GitHub Issues. Every PR requires at least one peer 
 
 | Member | Role |
 |---|---|
-| [Isaac Amar](https://github.com/isaacamar) | React frontend, chat UI integration, local Ollama client, WebSocket client |
-| Isaac Schertz | Spring Boot backend, REST API, PostgreSQL schema, Docker, WebSocket relay, cloud deployment |
+| [Isaac Amar](https://github.com/isaacamar) | React frontend, chat UI integration, local Ollama client, WebSocket client/relay, cloud deployment|
+| Isaac Schertz | Spring Boot backend, REST API, PostgreSQL schema, Docker |
 
 **Course:** ECE366 – Software Engineering & Large Systems Design
 **Institution:** The Cooper Union for the Advancement of Science and Art
