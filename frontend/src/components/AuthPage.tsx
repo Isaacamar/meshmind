@@ -1,9 +1,8 @@
 import { useState } from 'react'
-import { login, register } from '../api/cloud'
 import './AuthPage.css'
 
 interface Props {
-  onAuth: () => void
+  onAuth: (username: string) => void
 }
 
 export default function AuthPage({ onAuth }: Props) {
@@ -19,13 +18,36 @@ export default function AuthPage({ onAuth }: Props) {
     setError('')
     setLoading(true)
     try {
-      if (mode === 'login') {
-        await login(username, password)
-      } else {
-        await register(username, email, password)
-        await login(username, password)
+      const path = mode === 'login' ? '/api/login' : '/api/register'
+      const body: Record<string, string> = { username, password }
+      if (mode === 'register') body.email = email
+
+      const r = await fetch(path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (!r.ok) {
+        const text = await r.text()
+        throw new Error(text || `${r.status}`)
       }
-      onAuth()
+      const data = await r.json()
+      const user = data.user ?? { username }
+      localStorage.setItem('mm_user', JSON.stringify(user))
+
+      // After register, auto-login
+      if (mode === 'register') {
+        const lr = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password }),
+        })
+        if (!lr.ok) throw new Error('Registered but login failed')
+        const ld = await lr.json()
+        localStorage.setItem('mm_user', JSON.stringify(ld.user ?? { username }))
+      }
+
+      onAuth(username)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Something went wrong')
     } finally {
@@ -38,7 +60,7 @@ export default function AuthPage({ onAuth }: Props) {
       <div className="auth-card">
         <div className="auth-logo">⬡</div>
         <h1 className="auth-title">MeshMind</h1>
-        <p className="auth-sub">Privacy-first local AI — your conversations never leave your machine.</p>
+        <p className="auth-sub">Privacy-first local AI with a shared answer marketplace.</p>
 
         <div className="auth-tabs">
           <button className={mode === 'login' ? 'active' : ''} onClick={() => { setMode('login'); setError('') }}>
