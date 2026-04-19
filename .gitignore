@@ -1,0 +1,65 @@
+# Java / Spring Boot
+target/
+*.class
+*.jar
+*.war
+*.ear
+.mvn/
+!.mvn/wrapper/maven-wrapper.jar
+*.iml
+*.ipr
+*.iws
+.idea/
+*.class
+
+# Node / React
+node_modules/
+dist/
+build/
+.next/
+.env
+.env.local
+.env.*.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Python / OpenClaw
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+
+# SQLite databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Secrets / credentials
+.env
+*.pem
+*.key
+secrets/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+.docker/
+
+# Logs
+*.log
+logs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
