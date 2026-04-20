@@ -1,0 +1,29 @@
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/meshmind}
+    username: ${SPRING_DATASOURCE_USERNAME:meshmind}
+    password: ${SPRING_DATASOURCE_PASSWORD:changeme}
+  jpa:
+    hibernate:
+      ddl-auto: none    # schema.sql is the source of truth
+    properties:
+      hibernate:
+        jdbc:
+          lob:
+            non_contextual_creation: true
+    open-in-view: false
+
+server:
+  port: 8080
+
+meshmind:
+  jwt:
+    secret: ${JWT_SECRET:changeme-replace-in-production-at-least-32-chars}
+    expiration-hours: 168     # 7 days
+  marketplace:
+    embedding-dims: 768
+    verbatim-threshold: 0.90
+    repackage-threshold: 0.70
+    publish-bonus: 5
+    consume-royalty: 1
+    search-cost: 0
