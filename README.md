@@ -1,190 +1,154 @@
 # MeshMind
 
-**A Privacy-First, Peer-to-Peer Local AI Network**
-
-> All AI inference runs on each user's own machine.
-> The cloud layer handles accounts, groups, and message routing only.
-> No prompt or response content ever touches the central server.
+A privacy-first local AI network with a **prompt marketplace** — ask AI on your own hardware, but skip redundant inference when someone else has already answered your question.
 
 ---
 
-## What Is MeshMind?
+## The Idea
 
-MeshMind is a web-based chat application where AI runs entirely on your own hardware. Unlike ChatGPT or Claude, your conversations never leave your machine. You can also form private groups with friends or teammates and optionally route a query to a peer with a more powerful local model — all end-to-end encrypted before it hits the relay.
+Running LLMs locally is cheap but slow and repetitive — thousands of people ask "how do JWT refresh tokens work?" and their GPU generates the same answer every time.
 
-The cloud is intentionally minimal: it stores user accounts, group memberships, and acts as an encrypted message relay. The AI itself runs locally via [Ollama](https://ollama.com), a free open-source tool for running LLMs on consumer hardware.
+MeshMind adds a shared, opt-in cache:
+
+1. You ask a question. Your local node **embeds it privately** (nothing leaves your machine yet).
+2. The cloud returns semantically similar prompts others have published.
+3. One of three things happens:
+   - **Verbatim hit** (similarity ≥ 0.90) — serve the cached answer, 0 inference tokens.
+   - **Repackage** (0.70–0.90) — your local model rewrites the cached answer to fit your exact question. ~10x fewer tokens than a fresh answer.
+   - **Miss** (< 0.70) — full local inference, and you can publish the result to earn credits.
+4. Authors earn credits every time their published answer gets consumed.
+
+Plaintext never leaves your machine unless **you** explicitly publish.
 
 ---
 
-## Architecture Overview
+## Architecture
 
 ```
-                        Cloud (AWS / GCP)
-                       ┌─────────────────────────────────┐
-                       │  WebSocket Relay                │
-                       │        │                        │
-                       │  Spring Boot API ──► PostgreSQL │
-                       └────────┬──────────┬────────────┘
-                     auth/groups│          │auth/groups
-                                │          │
-              ┌─────────────────┘          └───────────────────┐
-              │                                                 │
-     ┌────────▼────────┐   peer query (encrypted)   ┌─────────▼────────┐
-     │  React UI (A)   │ ◄────────────────────────► │  React UI (B)    │
-     └────────┬────────┘                             └────────┬─────────┘
-              │                                               │
-     ┌────────▼────────┐                             ┌────────▼─────────┐
-     │  Ollama (local) │                             │  Ollama (local)  │
-     └────────┬────────┘                             └────────┬─────────┘
-              │                                               │
-     ┌────────▼────────┐                             ┌────────▼─────────┐
-     │ SQLite (cache)  │                             │ SQLite (cache)   │
-     └─────────────────┘                             └──────────────────┘
-          Machine A                                       Machine B
+┌─ LOCAL (your machine) ───────────────────────────────┐
+│  OpenClaw (FastAPI, :8000)                           │
+│   ├── Ollama client (embed + chat)                   │
+│   ├── Market client (auth + search + publish)        │
+│   └── /api/ask orchestrator                          │
+│  Ollama (:11434) — nomic-embed-text + chat model     │
+└──────────────────────────────────────────────────────┘
+          │  (JWT; embeddings for search; plaintext only on publish)
+          ▼
+┌─ CLOUD (AWS/GCP) ────────────────────────────────────┐
+│  Spring Boot (:8080) — auth, marketplace, credits    │
+│  PostgreSQL 16 + pgvector — IVFFlat cosine index     │
+└──────────────────────────────────────────────────────┘
 ```
 
-The relay server passes encrypted blobs between peers. It cannot read message content.
+---
+
+## Quick Start
+
+```bash
+# 0. prerequisites: Docker, Python 3.10+, Ollama
+ollama pull nomic-embed-text
+ollama pull llama3.2
+
+# 1. bring up cloud stack
+docker-compose up -d
+
+# 2. run local node
+cd openclaw
+pip install -r requirements.txt
+uvicorn app.server:app --reload --port 8000
+
+# 3. open http://localhost:8000
+```
 
 ---
 
-## Technology Stack
+## Tech Stack
 
-| Layer | Technology | Role |
-|---|---|---|
-| Frontend | React + TypeScript | Chat UI, group sidebar, node dashboard |
-| Local inference | Ollama (REST API) | LLM backend on user's machine |
-| Local cache | SQLite | Offline conversation history |
-| Service layer | Spring Boot 3.x (Java 21) | Auth, node registry, groups, WebSocket relay |
-| Cloud database | PostgreSQL 16 | Users, groups, conversations |
-| Auth | Spring Security + JWT | Stateless API authentication |
-| Containers | Docker + docker-compose | Local dev and cloud deployment |
-| Cloud hosting | AWS EC2 + RDS or GCP Cloud Run + Cloud SQL | Production |
+| Layer | Tech |
+|---|---|
+| Local inference | Ollama (chat + `nomic-embed-text`) |
+| Local node | Python + FastAPI |
+| Cloud API | Spring Boot 3.x, Java 21 |
+| Vector search | PostgreSQL 16 + pgvector (IVFFlat, cosine) |
+| Auth | JWT + BCrypt |
+| Container | Docker, docker-compose |
 
 ---
 
-## Core Features
+## Repository Layout
 
-| ID | Feature | Status |
+```
+meshmind-v2/
+├── backend/            # Spring Boot cloud service (Schertz)
+│   ├── src/main/java/dev/meshmind/
+│   │   ├── auth/       # JWT + register/login
+│   │   ├── user/       # User entity, /api/users/me
+│   │   ├── market/     # search / publish / consume / mine
+│   │   └── config/     # Security, JPA
+│   └── src/main/resources/schema.sql
+├── openclaw/           # Local FastAPI node (Amar)
+│   └── app/
+│       ├── ollama_client.py    # embed + chat
+│       ├── market_client.py    # cloud client
+│       └── server.py           # /api/ask orchestrator + demo UI
+├── docker-compose.yml
+└── docs/
+    ├── marketplace.md          # design notes for this pivot
+    ├── proposal.md             # original ECE366 proposal (for reference)
+    ├── architecture.md         # old P2P-routing architecture (superseded)
+    └── agent-mode.md           # future: terminal/filesystem control
+```
+
+---
+
+## API
+
+### Cloud (Spring Boot, `:8080`)
+
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
+| POST | `/api/auth/register` | no | create account |
+| POST | `/api/auth/login` | no | issue JWT |
+| GET | `/api/users/me` | yes | profile + credits |
+| POST | `/api/market/search` | yes | top-k by embedding |
+| POST | `/api/market/publish` | yes | add entry, earn bonus |
+| POST | `/api/market/consume` | yes | record use, pay royalty |
+| GET | `/api/market/mine` | yes | own published entries |
+
+### Local (FastAPI, `:8000`)
+
+| Method | Path | Purpose |
 |---|---|---|
-| F1 | User registration, login, JWT auth, profile management | In Progress |
-| F2 | Local AI chat interface (OpenClaw-based, already functional) | Done |
-| F3 | Node registry and online status heartbeat | In Progress |
-| F4 | Peer groups — create, invite, member list | In Progress|
-| F5 | Peer query routing via encrypted WebSocket relay | Testing |
-| F6 | Node dashboard — hardware stats, peer status | Planned |
-| F7 | Agent mode — terminal/kernel integration, filesystem-aware AI | Roadmap |
-| F8 | Distributed knowledge sharing — peer vector sync (stretch) | Stretch |
+| POST | `/api/login`, `/api/register` | pass-through to cloud |
+| GET | `/api/me` | current user |
+| POST | `/api/ask` | embed → search → verbatim/repackage/miss |
+| POST | `/api/publish` | publish last answer |
+
+---
+
+## What Changed From the Original Proposal
+
+The original MeshMind proposed peer query routing (send my prompt to your RTX 4090 via a WebSocket relay). That was cut. The marketplace replaces it with a stronger value proposition: **shared cache with attribution**, not borrowed hardware.
+
+- Cut: peer routing (F5), node heartbeat (F3), cloud conversation sync
+- Added: pgvector marketplace, credits ledger, three-mode ask orchestrator
+- Kept: local-first inference, privacy contract, Spring Boot + Postgres stack, Docker
+- Future: agent mode (filesystem + terminal control) — see `docs/agent-mode.md`
 
 ---
 
 ## Roadmap
 
-### Phase 1 — Backend Core (Sprint 1–2)
-- Spring Boot project setup with Docker + PostgreSQL
-- User auth: register, login, JWT, bcrypt
-- Node registry: heartbeat endpoint, online/offline tracking
-- REST API for groups: create, invite, list members
-
-### Phase 2 — Frontend Integration (Sprint 2–3)
-- Integrate OpenClaw chat UI with Spring Boot backend
-- Login/register screens
-- Group sidebar: member list, online status, model badges
-- Sync conversation history to PostgreSQL
-
-### Phase 3 — Peer Routing (Sprint 3–4)
-- WebSocket relay in Spring Boot
-- Client-side encryption (Web Crypto API / libsodium.js)
-- UI: "Ask peer" button, peer model selector
-- Node dashboard: GPU/RAM stats, peer status panel
-
-### Phase 4 — Agent Mode (Roadmap)
-- Terminal/kernel integration within the chat UI
-- Filesystem-aware AI with workspace scoping
-- Three-layer path safety (allowlist, traversal guard, destructive-op confirmation)
-- Plan-then-execute model: AI proposes actions, user approves before anything runs
-- Inspired by Claude Code — local, private, and IDE-embeddable
-
-### Phase 5 — Distributed Knowledge (Stretch)
-- Local document embeddings (not the documents themselves)
-- Peer vector sync within groups
-- Cross-peer RAG queries
-
----
-
-## Getting Started
-
-### Prerequisites
-- [Ollama](https://ollama.com) installed and running locally
-- Java 21+
-- Node.js 18+
-- Docker + docker-compose
-
-### Local Development
-
-```bash
-# Clone the repo
-git clone https://github.com/isaacamar/meshmind.git
-cd meshmind
-
-# Start PostgreSQL and Spring Boot via Docker
-docker-compose up -d
-
-# Start the React frontend
-cd frontend
-npm install
-npm run dev
-
-# The OpenClaw local chat backend (Python/FastAPI) runs separately
-cd openclaw
-pip install -r requirements.txt
-uvicorn app.server:app --reload --port 8000
-```
-
-> Full setup guide: [docs/setup.md](docs/setup.md) (coming soon)
-
----
-
-## Repository Structure
-
-```
-meshmind/
-├── backend/          # Spring Boot service (Java 21)
-│   └── src/
-├── frontend/         # React + TypeScript UI
-│   └── src/
-├── openclaw/         # Local FastAPI chat backend (Python)
-│   └── app/
-├── docs/             # Proposals, architecture, setup guides
-│   ├── proposal.md
-│   ├── agent-mode.md
-│   └── architecture.md
-├── docker-compose.yml
-└── README.md
-```
-
----
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for branch conventions, PR process, and code standards.
-
-This project tracks work via GitHub Issues. Every PR requires at least one peer review before merge.
-
----
-
-## Team
-
-| Member | Role |
+| Milestone | Deliverable |
 |---|---|
-| [Isaac Amar](https://github.com/isaacamar) | React frontend, chat UI integration, local Ollama client, WebSocket client/relay, cloud deployment|
-| Isaac Schertz | Spring Boot backend, REST API, PostgreSQL schema, Docker |
-
-**Course:** ECE366 – Software Engineering & Large Systems Design
-**Institution:** The Cooper Union for the Advancement of Science and Art
-**Semester:** Spring 2026
+| **Now** | Auth, marketplace search/publish/consume, credits, demo UI |
+| **Next** | Streaming (SSE) in `/api/ask`, better repackage prompt, upvote/downvote |
+| **Demo** | Deploy cloud to AWS/GCP free tier; two-user end-to-end credit flow |
+| **Stretch** | Agent mode (read/write workspace files, run shell commands with approval) |
 
 ---
 
-## License
+## Course Context
 
-MIT — see [LICENSE](LICENSE).
+ECE366 — Software Engineering & Large Systems Design, Spring 2026, The Cooper Union.
+Team: Isaac Amar (local node + frontend), Isaac Schertz (Spring Boot backend).
