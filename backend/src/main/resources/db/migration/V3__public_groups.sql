@@ -1,1 +1,0 @@
-ALTER TABLE peer_groups ADD COLUMN is_public BOOLEAN DEFAULT FALSE;

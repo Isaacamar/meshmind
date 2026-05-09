@@ -3,6 +3,9 @@ spring:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/meshmind}
     username: ${SPRING_DATASOURCE_USERNAME:meshmind}
     password: ${SPRING_DATASOURCE_PASSWORD:changeme}
+  sql:
+    init:
+      mode: always
   jpa:
     hibernate:
       ddl-auto: none    # schema.sql is the source of truth
