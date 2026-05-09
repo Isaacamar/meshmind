@@ -5,6 +5,7 @@ import rehypeKatex from 'rehype-katex'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import type { LocalMessage, LocalSession } from '../App'
+import { apiUrl } from '../api/local'
 import { modelColor, contextWindowSize, ctxFillColor, ctxWarning } from '../utils/models'
 import './Chat.css'
 
@@ -27,6 +28,20 @@ const MODE_LABEL: Record<string, string> = {
   verbatim: '✓ Cached answer',
   repackage: '↻ Repackaged',
   miss: '✗ Fresh inference',
+}
+
+function normalizeLatex(content: string): string {
+  return content
+    // \[...\] → block $$
+    .replace(/\\\[([\s\S]*?)\\\]/g, (_, inner) => `\n\n$$\n${inner.trim()}\n$$\n\n`)
+    // \(...\) → inline $
+    .replace(/\\\(([\s\S]*?)\\\)/g, (_, inner) => `$${inner.trim()}$`)
+    // \begin{env}...\end{env} not already inside $$ → wrap as block
+    .replace(/\\begin\{(align\*?|aligned|equation\*?|gather\*?|multline\*?)\}([\s\S]*?)\\end\{\1\}/g,
+      (match) => `\n\n$$\n${match}\n$$\n\n`)
+    // $$ that appears mid-line (not already preceded by a newline) → force onto its own line
+    .replace(/([^\n])\$\$([\s\S]*?)\$\$/g, (_, pre, inner) => `${pre}\n\n$$${inner}$$`)
+    .replace(/\$\$([\s\S]*?)\$\$([^\n])/g, (_, inner, post) => `$$${inner}$$\n\n${post}`)
 }
 
 function Markdown({ content }: { content: string }) {
@@ -53,7 +68,7 @@ function Markdown({ content }: { content: string }) {
         },
       }}
     >
-      {content}
+      {normalizeLatex(content)}
     </ReactMarkdown>
   )
 }
@@ -69,6 +84,7 @@ export default function Chat({ session, onUpdate, onCreditsEarned, temperature }
   const [toast, setToast] = useState<string | null>(null)
 
   const bottomRef = useRef<HTMLDivElement>(null)
+  const messagesRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -76,7 +92,10 @@ export default function Chat({ session, onUpdate, onCreditsEarned, temperature }
   useEffect(() => { setMsgs(session.messages) }, [session.id])
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    const el = messagesRef.current
+    if (!el) return
+    // During streaming use instant scroll so smooth animation doesn't fight itself
+    el.scrollTo({ top: el.scrollHeight, behavior: streaming ? 'instant' : 'smooth' })
   }, [msgs, streaming])
 
   useEffect(() => {
@@ -121,7 +140,7 @@ export default function Chat({ session, onUpdate, onCreditsEarned, temperature }
       try {
         const form = new FormData()
         form.append('file', file)
-        const r = await fetch('/api/parse/pdf', { method: 'POST', body: form })
+        const r = await fetch(apiUrl('/api/parse/pdf'), { method: 'POST', body: form })
         if (!r.ok) throw new Error(await r.text())
         const data = await r.json()
         setAttachment({ type: 'pdf', name: file.name, text: data.text })
@@ -190,7 +209,7 @@ export default function Chat({ session, onUpdate, onCreditsEarned, temperature }
     if (isFirst) onUpdate({ ...session, title: newTitle, messages: [...msgs, userMsg] })
 
     try {
-      const r = await fetch('/api/ask/stream', {
+      const r = await fetch(apiUrl('/api/ask/stream'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -281,7 +300,7 @@ export default function Chat({ session, onUpdate, onCreditsEarned, temperature }
 
     setPublishingIdx(msgIdx)
     try {
-      const r = await fetch('/api/publish', {
+      const r = await fetch(apiUrl('/api/publish'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -356,7 +375,7 @@ export default function Chat({ session, onUpdate, onCreditsEarned, temperature }
         </div>
       )}
 
-      <div className="messages">
+      <div className="messages" ref={messagesRef}>
         {msgs.length === 0 && !streaming && (
           <div className="chat-hint">
             Ask anything — embed locally, search the marketplace, get an answer.

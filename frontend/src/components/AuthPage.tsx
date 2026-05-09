@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { apiUrl } from '../api/local'
 import './AuthPage.css'
 
 interface Props {
@@ -22,7 +23,7 @@ export default function AuthPage({ onAuth }: Props) {
       const body: Record<string, string> = { username, password }
       if (mode === 'register') body.email = email
 
-      const r = await fetch(path, {
+      const r = await fetch(apiUrl(path), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -37,7 +38,7 @@ export default function AuthPage({ onAuth }: Props) {
 
       // After register, auto-login
       if (mode === 'register') {
-        const lr = await fetch('/api/login', {
+        const lr = await fetch(apiUrl('/api/login'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ username, password }),
