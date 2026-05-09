@@ -26,8 +26,12 @@ class MarketClient:
                              json={"username": username, "email": email, "password": password})
             r.raise_for_status()
             data = r.json()
-            self.token = data["token"]
-            self.username = data["user"]["username"]
+            # v1 backend returns UserResponse on register (no token); v2 returns LoginResponse
+            if "token" in data:
+                self.token = data["token"]
+                self.username = data.get("user", {}).get("username", username)
+            else:
+                self.username = data.get("username", username)
             return data
 
     async def login(self, username: str, password: str) -> dict:

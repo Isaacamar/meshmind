@@ -183,9 +183,12 @@ class PublishRequest(BaseModel):
 async def publish(req: PublishRequest):
     if not market.token:
         raise HTTPException(401, "not logged in")
-    return await market.publish(req.prompt, req.response,
-                                 req.model_used or ollama_client.DEFAULT_CHAT_MODEL,
-                                 req.embedding, req.tags)
+    try:
+        return await market.publish(req.prompt, req.response,
+                                     req.model_used or ollama_client.DEFAULT_CHAT_MODEL,
+                                     req.embedding, req.tags)
+    except Exception as e:
+        raise HTTPException(503, f"Marketplace unavailable: {e}")
 
 
 @app.get("/api/mine")
