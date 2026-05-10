@@ -44,20 +44,20 @@ Plaintext never leaves your machine unless **you** explicitly publish.
 
 ## Quick Start
 
+**Just want to use the app?** See [GETTING_STARTED.md](GETTING_STARTED.md) — you only need Python and Ollama.
+
+**Developer setup (self-host the backend):**
+
 ```bash
-# 0. prerequisites: Docker, Python 3.10+, Ollama
-ollama pull nomic-embed-text
-ollama pull llama3.2
+# Prerequisites: Docker, Python 3.10+, Ollama
+git clone https://github.com/Isaacamar/meshmind.git
+cd meshmind
 
-# 1. bring up cloud stack
-docker-compose up -d
+# Start the cloud stack locally
+docker compose up -d
 
-# 2. run local node
-cd openclaw
-pip install -r requirements.txt
-uvicorn app.server:app --reload --port 8000
-
-# 3. open http://localhost:8000
+# Start the local node
+MESHMIND_CLOUD=http://localhost:8080 python local_node.py start
 ```
 
 ---
