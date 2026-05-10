@@ -21,7 +21,7 @@ That's it. No Docker, no Java, no database setup.
 ```bash
 git clone https://github.com/Isaacamar/meshmind.git
 cd meshmind
-python3 local_node.py
+python3.13 local_node.py
 ```
 
 The script will:
@@ -31,7 +31,7 @@ The script will:
 4. Ask which chat model you want to install (or skip if you already have one)
 5. Start the local node
 
-> **Windows users:** use `python3 local_node.py` in a regular terminal (not WSL). Ollama must be installed and running first.
+> **Windows users:** use `python3.13 local_node.py` in a regular terminal (not WSL). Ollama must be installed and running first.
 
 ---
 
@@ -40,7 +40,7 @@ The script will:
 Make sure Ollama is running, then:
 
 ```bash
-python3 local_node.py start
+python3.13 local_node.py start
 ```
 
 Then open the MeshMind web app: **[meshmind-1.onrender.com](https://meshmind-1.onrender.com)** 
@@ -92,11 +92,11 @@ You can also pull any model from [ollama.com/library](https://ollama.com/library
 ## Troubleshooting
 
 **"Local node not ready" in the app**
-- Make sure `python3 local_node.py start` is running in a terminal
+- Make sure `python3.13 local_node.py start` is running in a terminal
 - Make sure Ollama is running (`ollama serve`)
 
 **No models in the dropdown**
-- You need at least one chat model. Run `python3 local_node.py models` to install one.
+- You need at least one chat model. Run `python3.13 local_node.py models` to install one.
 
 **Slow first response**
 - The free cloud backend spins down after inactivity. The first request after a period of inactivity may take up to 60 seconds while it wakes up. Subsequent requests are fast.
