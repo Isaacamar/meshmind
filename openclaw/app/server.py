@@ -373,28 +373,30 @@ class StreamAskRequest(BaseModel):
     image_b64: Optional[str] = None          # base64 image for vision
     history: Optional[list[HistoryMessage]] = None  # prior turns for multi-model context
     temperature: float = 0.7
+    local_only: bool = False                 # skip marketplace entirely, always infer locally
 
 
 async def _stream_ask(prompt: str, chat_model: str,
                       image_b64: Optional[str] = None,
                       history: Optional[list[HistoryMessage]] = None,
-                      temperature: float = 0.7):
+                      temperature: float = 0.7,
+                      local_only: bool = False):
     """SSE generator:
+    - local_only=True: skip embed + marketplace, always do full local inference
     - Single-turn (no history): embed → marketplace → verbatim/repackage/miss
     - Multi-turn (has history): skip marketplace, give model full conversation context
     - Vision: skip marketplace, route to vision model with image
     """
     try:
-        embedding = await ollama_client.embed(prompt)
+        embedding = await ollama_client.embed(prompt) if not local_only else []
     except Exception:
         embedding = []
 
     has_history = bool(history)
 
-    # Multi-turn conversations and vision queries bypass the marketplace —
-    # each turn is unique in context so caching doesn't apply.
+    # local_only, multi-turn, and vision all bypass the marketplace
     hits = []
-    if market.token and not image_b64 and not has_history:
+    if market.token and not local_only and not image_b64 and not has_history:
         try:
             hits = await market.search(embedding, k=5)
         except Exception:
@@ -484,14 +486,15 @@ async def _stream_ask(prompt: str, chat_model: str,
     dur_ns     = out_meta.get("eval_duration_ns", 0)
     toks_per_sec = round(tokens_out / (dur_ns / 1e9), 1) if dur_ns > 0 else None
 
-    yield f'data: {json.dumps({"done": True, "mode": "miss", "embedding": embedding, "tokens_in": tokens_in, "tokens_out": tokens_out, "toks_per_sec": toks_per_sec})}\n\n'
+    mode = "local" if local_only else "miss"
+    yield f'data: {json.dumps({"done": True, "mode": mode, "embedding": embedding, "tokens_in": tokens_in, "tokens_out": tokens_out, "toks_per_sec": toks_per_sec})}\n\n'
 
 
 @app.post("/api/ask/stream")
 async def ask_stream(req: StreamAskRequest):
     chat_model = req.model or ollama_client.DEFAULT_CHAT_MODEL
     return StreamingResponse(
-        _stream_ask(req.prompt, chat_model, req.image_b64, req.history, req.temperature),
+        _stream_ask(req.prompt, chat_model, req.image_b64, req.history, req.temperature, req.local_only),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

@@ -84,6 +84,7 @@ export default function App() {
   const [showModelBrowser, setShowModelBrowser] = useState(false)
   const [customModel, setCustomModel] = useState('')
   const [temperature, setTemperature] = useState(0.7)
+  const [localOnly, setLocalOnly] = useState(() => localStorage.getItem('mm_local_only') === '1')
 
   const RECOMMENDED = [
     { name: 'llama3.2:3b',      size: '~2 GB', desc: 'Fast general chat' },
@@ -378,6 +379,23 @@ export default function App() {
           )}
         </div>
 
+        <div className="local-only-toggle">
+          <label className="local-only-label">
+            <span>Local only</span>
+            <span className="local-only-desc">skip marketplace, always infer locally</span>
+          </label>
+          <button
+            className={`toggle-btn ${localOnly ? 'on' : 'off'}`}
+            onClick={() => {
+              const next = !localOnly
+              setLocalOnly(next)
+              localStorage.setItem('mm_local_only', next ? '1' : '0')
+            }}
+          >
+            {localOnly ? 'ON' : 'OFF'}
+          </button>
+        </div>
+
         <div className="temp-slider-wrap">
           <div className="temp-slider-header">
             <label>Temperature</label>
@@ -440,6 +458,7 @@ export default function App() {
             onUpdate={updateSession}
             onCreditsEarned={onCreditsEarned}
             temperature={temperature}
+            localOnly={localOnly}
           />
         ) : (
           <div className="empty-state">

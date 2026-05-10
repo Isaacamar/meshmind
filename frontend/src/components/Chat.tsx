@@ -14,6 +14,7 @@ interface Props {
   onUpdate: (updated: LocalSession) => void
   onCreditsEarned: (n: number) => void
   temperature: number
+  localOnly: boolean
 }
 
 interface Attachment {
@@ -28,6 +29,7 @@ const MODE_LABEL: Record<string, string> = {
   verbatim: '✓ Cached answer',
   repackage: '↻ Repackaged',
   miss: '✗ Fresh inference',
+  local: '⬡ Local only',
 }
 
 function normalizeLatex(content: string): string {
@@ -73,7 +75,7 @@ function Markdown({ content }: { content: string }) {
   )
 }
 
-export default function Chat({ session, onUpdate, onCreditsEarned, temperature }: Props) {
+export default function Chat({ session, onUpdate, onCreditsEarned, temperature, localOnly }: Props) {
   // Local message state — updated per-token during streaming, synced to parent on completion
   const [msgs, setMsgs] = useState<LocalMessage[]>(session.messages)
   const [input, setInput] = useState('')
@@ -218,6 +220,7 @@ export default function Chat({ session, onUpdate, onCreditsEarned, temperature }
           image_b64: imageB64,
           history: history.length > 0 ? history : undefined,
           temperature,
+          local_only: localOnly,
         }),
       })
       if (!r.ok) {

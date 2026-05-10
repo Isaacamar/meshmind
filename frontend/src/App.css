@@ -173,6 +173,36 @@
 }
 
 /* ── Temperature slider ────────────────────────────────────────────────────── */
+.local-only-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #151d27;
+  border: 1px solid #1e2a38;
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.local-only-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.local-only-label span:first-child { font-size: 0.8rem; font-weight: 600; color: #e0e8f0; }
+.local-only-desc { font-size: 0.68rem; color: #6a7f96; }
+.toggle-btn {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 5px;
+  border: none;
+  cursor: pointer;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+.toggle-btn.on  { background: #34d399; color: #0d1117; }
+.toggle-btn.off { background: #2a3a4a; color: #6a7f96; }
+.toggle-btn:hover { opacity: 0.85; }
+
 .temp-slider-wrap { display: flex; flex-direction: column; gap: 4px; }
 
 .temp-slider-header {
