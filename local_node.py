@@ -94,6 +94,7 @@ def _pick_from_input(choice: str) -> list[str]:
     """Turn a user input like '1 3' or 'deepseek-r1:7b' into a list of model names."""
     to_pull: list[str] = []
     for token in choice.split():
+        token = token.strip("'\"")
         if token.isdigit():
             idx = int(token) - 1
             if 0 <= idx < len(CATALOG):
@@ -183,7 +184,7 @@ def choose_chat_models() -> None:
 
 # ── start ──────────────────────────────────────────────────────────────────────
 def start_node() -> None:
-    cloud  = os.environ.get("MESHMIND_CLOUD", "http://localhost:8080")
+    cloud  = os.environ.get("MESHMIND_CLOUD", "https://meshmind-g3am.onrender.com")
     ollama = os.environ.get("OLLAMA_URL",     "http://localhost:11434")
 
     print()
