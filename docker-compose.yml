@@ -27,5 +27,29 @@ services:
     ports:
       - "8080:8080"
 
+  openclaw:
+    build: ./openclaw
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      OLLAMA_URL: http://host.docker.internal:11434
+      MESHMIND_CLOUD: http://backend:8080
+      SQLITE_PATH: /data/openclaw.db
+    ports:
+      - "8000:8000"
+    volumes:
+      - openclaw_data:/data
+      - ./openclaw/app:/app/app
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - openclaw
+    ports:
+      - "3000:3000"
+
 volumes:
   postgres_data:
+  openclaw_data:

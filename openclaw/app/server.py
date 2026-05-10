@@ -22,6 +22,7 @@ from typing import Optional
 import os
 import io
 import json
+import re
 import httpx
 
 from app import ollama_client
@@ -36,8 +37,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.middleware("http")
+async def private_network_access_headers(request, call_next):
+    """Let a hosted MeshMind web UI talk to a user's local node."""
+    response = await call_next(request)
+    response.headers["Access-Control-Allow-Private-Network"] = "true"
+    return response
+
+
 CLOUD_URL = os.environ.get("MESHMIND_CLOUD", "http://localhost:8080")
 market = MarketClient(CLOUD_URL)
+REQUIRED_MODELS = ["nomic-embed-text"]
+RECOMMENDED_MODELS = [
+    "llama3.2:3b", "mistral:7b", "qwen2.5-coder:7b",
+    "llava:7b", "phi4:14b", "gemma3:12b",
+]
 
 
 # ----- auth pass-through -----
@@ -68,21 +83,105 @@ async def login(req: AuthRequest):
 
 EMBED_ONLY = {"nomic-embed-text", "mxbai-embed-large", "all-minilm", "nomic-embed"}
 
+
+async def _ollama_tags() -> list[dict]:
+    async with httpx.AsyncClient(timeout=5) as c:
+        r = await c.get(f"{ollama_client.OLLAMA_URL}/api/tags")
+        r.raise_for_status()
+        return r.json().get("models", [])
+
+
+def _model_names(models_data: list[dict]) -> list[str]:
+    return [m["name"] for m in models_data if "name" in m]
+
+
+def _has_model(installed: list[str], wanted: str) -> bool:
+    base = wanted.split(":")[0]
+    return any(name == wanted or name.split(":")[0] == base for name in installed)
+
+
 @app.get("/api/models")
 async def models():
     """Return list of locally available chat-capable Ollama models."""
     try:
-        async with httpx.AsyncClient(timeout=5) as c:
-            r = await c.get(f"{ollama_client.OLLAMA_URL}/api/tags")
-            r.raise_for_status()
-            data = r.json()
-            names = [
-                m["name"] for m in data.get("models", [])
-                if not any(e in m["name"].lower() for e in EMBED_ONLY)
-            ]
-            return {"models": names}
+        names = [
+            name for name in _model_names(await _ollama_tags())
+            if not any(e in name.lower() for e in EMBED_ONLY)
+        ]
+        return {"models": names}
     except Exception:
         return {"models": []}
+
+
+@app.get("/api/local/status")
+async def local_status():
+    """Report whether the local node can see Ollama and required models."""
+    try:
+        models_data = await _ollama_tags()
+        installed = _model_names(models_data)
+        missing_required = [m for m in REQUIRED_MODELS if not _has_model(installed, m)]
+        missing_recommended = [m for m in RECOMMENDED_MODELS if not _has_model(installed, m)]
+        return {
+            "ok": len(missing_required) == 0,
+            "ollama": "reachable",
+            "ollamaUrl": ollama_client.OLLAMA_URL,
+            "cloudUrl": CLOUD_URL,
+            "installedModels": installed,
+            "requiredModels": REQUIRED_MODELS,
+            "recommendedModels": RECOMMENDED_MODELS,
+            "missingRequired": missing_required,
+            "missingRecommended": missing_recommended,
+        }
+    except Exception as e:
+        return {
+            "ok": False,
+            "ollama": "unreachable",
+            "ollamaUrl": ollama_client.OLLAMA_URL,
+            "cloudUrl": CLOUD_URL,
+            "installedModels": [],
+            "requiredModels": REQUIRED_MODELS,
+            "recommendedModels": RECOMMENDED_MODELS,
+            "missingRequired": REQUIRED_MODELS,
+            "missingRecommended": RECOMMENDED_MODELS,
+            "error": str(e),
+        }
+
+
+class PullModelRequest(BaseModel):
+    model: str
+
+
+_VALID_MODEL = re.compile(r'^[a-zA-Z0-9][\w.:\-/]{0,127}$')
+
+
+@app.post("/api/models/pull")
+async def pull_model(req: PullModelRequest):
+    """Stream `ollama pull` progress as SSE. Accepts any valid Ollama model name."""
+    if not _VALID_MODEL.match(req.model):
+        raise HTTPException(400, "invalid model name")
+
+    async def gen():
+        try:
+            async with httpx.AsyncClient(timeout=None) as c:
+                async with c.stream(
+                    "POST",
+                    f"{ollama_client.OLLAMA_URL}/api/pull",
+                    json={"name": req.model, "stream": True},
+                ) as r:
+                    r.raise_for_status()
+                    async for line in r.aiter_lines():
+                        if not line:
+                            continue
+                        yield f"data: {line}\n\n"
+            yield f'data: {json.dumps({"status": "done", "model": req.model})}\n\n'
+        except Exception as e:
+            yield f'data: {json.dumps({"status": "error", "error": str(e)})}\n\n'
+
+    return StreamingResponse(
+        gen(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.get("/api/me")
@@ -183,9 +282,12 @@ class PublishRequest(BaseModel):
 async def publish(req: PublishRequest):
     if not market.token:
         raise HTTPException(401, "not logged in")
-    return await market.publish(req.prompt, req.response,
-                                 req.model_used or ollama_client.DEFAULT_CHAT_MODEL,
-                                 req.embedding, req.tags)
+    try:
+        return await market.publish(req.prompt, req.response,
+                                     req.model_used or ollama_client.DEFAULT_CHAT_MODEL,
+                                     req.embedding, req.tags)
+    except Exception as e:
+        raise HTTPException(503, f"Marketplace unavailable: {e}")
 
 
 @app.get("/api/mine")
@@ -193,6 +295,69 @@ async def mine():
     if not market.token:
         raise HTTPException(401, "not logged in")
     return {"entries": await market.mine()}
+
+
+class DebugSearchRequest(BaseModel):
+    prompt: str
+    k: int = 10
+
+@app.get("/api/stats")
+async def stats():
+    """Aggregate marketplace stats — hit rates, credits, savings. Useful for thesis proof."""
+    if not market.token:
+        raise HTTPException(401, "not logged in")
+    try:
+        async with httpx.AsyncClient(timeout=10) as c:
+            r = await c.get(
+                f"{CLOUD_URL}/api/market/stats",
+                headers={"Authorization": f"Bearer {market.token}"},
+            )
+            r.raise_for_status()
+            data = r.json()
+    except Exception as e:
+        raise HTTPException(503, f"Backend unavailable: {e}")
+
+    # Compute derived thesis metrics from raw DB counts
+    by_mode = {row["mode"]: row for row in data.get("byMode", [])}
+    verbatim_n  = int(by_mode.get("verbatim",  {}).get("cnt", 0))
+    repackage_n = int(by_mode.get("repackage", {}).get("cnt", 0))
+    total_consumed = int(data.get("totalConsumed", 0))
+
+    # Token savings estimate:
+    #   verbatim  → 0 inference tokens (100% saved vs. ~512 avg miss)
+    #   repackage → ~10% of miss tokens (90% saved vs. ~512 avg)
+    AVG_MISS_TOKENS = 512
+    tokens_saved = verbatim_n * AVG_MISS_TOKENS + repackage_n * int(AVG_MISS_TOKENS * 0.90)
+
+    total_lookups = verbatim_n + repackage_n
+    hit_rate = round(total_lookups / total_consumed * 100, 1) if total_consumed > 0 else 0.0
+
+    data["derived"] = {
+        "verbatimCount":  verbatim_n,
+        "repackageCount": repackage_n,
+        "hitRatePct":     hit_rate,
+        "tokensSavedEst": tokens_saved,
+        "avgMissTokensAssumed": AVG_MISS_TOKENS,
+    }
+    return data
+
+
+@app.post("/api/debug/search")
+async def debug_search(req: DebugSearchRequest):
+    """Show raw marketplace similarity scores for any prompt — for tuning and inspection."""
+    try:
+        embedding = await ollama_client.embed(req.prompt)
+    except Exception as e:
+        raise HTTPException(500, f"embed failed: {e}")
+    try:
+        hits = await market.search(embedding, k=req.k)
+    except Exception as e:
+        return {"error": str(e), "hits": []}
+    return {
+        "prompt": req.prompt,
+        "thresholds": {"verbatim": 0.85, "repackage": 0.60},
+        "hits": hits,
+    }
 
 
 # ----- streaming ask -----
@@ -208,34 +373,50 @@ class StreamAskRequest(BaseModel):
     image_b64: Optional[str] = None          # base64 image for vision
     history: Optional[list[HistoryMessage]] = None  # prior turns for multi-model context
     temperature: float = 0.7
+    local_only: bool = False                 # skip marketplace entirely, always infer locally
 
 
 async def _stream_ask(prompt: str, chat_model: str,
                       image_b64: Optional[str] = None,
                       history: Optional[list[HistoryMessage]] = None,
-                      temperature: float = 0.7):
+                      temperature: float = 0.7,
+                      local_only: bool = False):
     """SSE generator:
+    - local_only=True: skip embed + marketplace, always do full local inference
     - Single-turn (no history): embed → marketplace → verbatim/repackage/miss
     - Multi-turn (has history): skip marketplace, give model full conversation context
     - Vision: skip marketplace, route to vision model with image
     """
     try:
-        embedding = await ollama_client.embed(prompt)
+        embedding = await ollama_client.embed(prompt) if not local_only else []
     except Exception:
         embedding = []
 
     has_history = bool(history)
 
-    # Multi-turn conversations and vision queries bypass the marketplace —
-    # each turn is unique in context so caching doesn't apply.
+    # local_only, multi-turn, and vision all bypass the marketplace
     hits = []
-    if market.token and not image_b64 and not has_history:
+    if market.token and not local_only and not image_b64 and not has_history:
         try:
-            hits = await market.search(embedding, k=3)
+            hits = await market.search(embedding, k=5)
         except Exception:
             pass
 
-    top = hits[0] if hits else None
+    # Override mode classification with local thresholds
+    # (backend uses 0.90/0.70; we use tighter verbatim, looser repackage)
+    VERBATIM_T = 0.85
+    REPACKAGE_T = 0.60
+    for h in hits:
+        sim = h.get("similarity", 0)
+        if sim >= VERBATIM_T:
+            h["mode"] = "verbatim"
+        elif sim >= REPACKAGE_T:
+            h["mode"] = "repackage"
+        else:
+            h["mode"] = "miss"
+
+    top = next((h for h in hits if h["mode"] in ("verbatim", "repackage")), None)
+    print(f"[SEARCH] prompt='{prompt[:60]}' hits={[(h.get('prompt','?')[:40], round(h.get('similarity',0),3), h['mode']) for h in hits[:3]]}")
 
     # Verbatim cache hit — no inference needed
     if top and top["mode"] == "verbatim":
@@ -266,7 +447,19 @@ async def _stream_ask(prompt: str, chat_model: str,
         return
 
     # Miss, multi-turn, or vision — build full messages array and stream
-    messages: list[dict] = []
+    messages: list[dict] = [
+        {"role": "system", "content": (
+            "You are a helpful assistant. Follow these formatting rules exactly:\n"
+            "- MATH inline: wrap in single dollar signs like $E = mc^2$\n"
+            "- MATH display/block: put $$ on its own line with a blank line before and after, never mid-sentence:\n"
+            "  (blank line)\n  $$\n  F = ma\n  $$\n  (blank line)\n"
+            "- NEVER place $$ in the middle of a sentence or run text after $$ on the same line\n"
+            "- HEADERS (##, ###) must be on their own line, never embedded in a sentence\n"
+            "- CODE: fenced blocks with language tag (```python, ```java, etc.)\n"
+            "- TABLES: standard markdown pipe tables\n"
+            "- \\begin{align} environments must be wrapped inside $$ $$ delimiters"
+        )}
+    ]
 
     if has_history:
         messages.extend({"role": m.role, "content": m.content} for m in history)
@@ -293,14 +486,15 @@ async def _stream_ask(prompt: str, chat_model: str,
     dur_ns     = out_meta.get("eval_duration_ns", 0)
     toks_per_sec = round(tokens_out / (dur_ns / 1e9), 1) if dur_ns > 0 else None
 
-    yield f'data: {json.dumps({"done": True, "mode": "miss", "embedding": embedding, "tokens_in": tokens_in, "tokens_out": tokens_out, "toks_per_sec": toks_per_sec})}\n\n'
+    mode = "local" if local_only else "miss"
+    yield f'data: {json.dumps({"done": True, "mode": mode, "embedding": embedding, "tokens_in": tokens_in, "tokens_out": tokens_out, "toks_per_sec": toks_per_sec})}\n\n'
 
 
 @app.post("/api/ask/stream")
 async def ask_stream(req: StreamAskRequest):
     chat_model = req.model or ollama_client.DEFAULT_CHAT_MODEL
     return StreamingResponse(
-        _stream_ask(req.prompt, chat_model, req.image_b64, req.history, req.temperature),
+        _stream_ask(req.prompt, chat_model, req.image_b64, req.history, req.temperature, req.local_only),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
