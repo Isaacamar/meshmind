@@ -111,6 +111,13 @@ def _pick_from_input(choice: str) -> list[str]:
 def check_python() -> None:
     if sys.version_info < (3, 10):
         sys.exit("MeshMind requires Python 3.10+. Download it from https://python.org")
+    if sys.version_info >= (3, 14):
+        sys.exit(
+            f"Python {sys.version_info.major}.{sys.version_info.minor} is too new — "
+            "pydantic-core does not support it yet. Use Python 3.10–3.13.\n"
+            "Install with: brew install python@3.13\n"
+            "Then run:     python3.13 local_node.py"
+        )
 
 
 def check_ollama() -> bool:
