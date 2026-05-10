@@ -57,7 +57,7 @@ cd meshmind
 docker compose up -d
 
 # Start the local node
-MESHMIND_CLOUD=http://localhost:8080 python local_node.py start
+MESHMIND_CLOUD=http://localhost:8080 python3 local_node.py start
 ```
 
 ---
