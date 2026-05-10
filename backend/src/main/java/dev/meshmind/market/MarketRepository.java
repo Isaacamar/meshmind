@@ -114,4 +114,30 @@ public class MarketRepository {
                 "WHERE m.author_id = ? ORDER BY m.created_at DESC LIMIT ?",
                 mapper, authorId, limit);
     }
+
+    /** Aggregate statistics for thesis proof — hit rates, credits, savings. */
+    public java.util.Map<String, Object> stats() {
+        Long totalEntries   = jdbc.queryForObject("SELECT COUNT(*) FROM market_entries", Long.class);
+        Long totalUsers     = jdbc.queryForObject("SELECT COUNT(*) FROM users", Long.class);
+        Long totalConsumed  = jdbc.queryForObject("SELECT COALESCE(SUM(consume_count),0) FROM market_entries", Long.class);
+        Long creditsEarned  = jdbc.queryForObject(
+                "SELECT COALESCE(SUM(delta),0) FROM credit_events WHERE delta > 0", Long.class);
+
+        // consumptions breakdown by mode
+        var modeRows = jdbc.queryForList(
+                "SELECT mode, COUNT(*) AS cnt, AVG(similarity) AS avg_sim FROM consumptions GROUP BY mode");
+
+        // credit event totals by reason
+        var creditRows = jdbc.queryForList(
+                "SELECT reason, COUNT(*) AS cnt, SUM(delta) AS total FROM credit_events GROUP BY reason");
+
+        return java.util.Map.of(
+                "totalEntries",  totalEntries  == null ? 0L : totalEntries,
+                "totalUsers",    totalUsers    == null ? 0L : totalUsers,
+                "totalConsumed", totalConsumed == null ? 0L : totalConsumed,
+                "creditsEarned", creditsEarned == null ? 0L : creditsEarned,
+                "byMode",        modeRows,
+                "byReason",      creditRows
+        );
+    }
 }

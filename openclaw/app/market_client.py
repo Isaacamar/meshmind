@@ -24,7 +24,8 @@ class MarketClient:
         async with httpx.AsyncClient(timeout=10) as c:
             r = await c.post(f"{self.base_url}/api/auth/register", headers=self._headers(),
                              json={"username": username, "email": email, "password": password})
-            r.raise_for_status()
+            if not r.is_success:
+                raise Exception(r.text or f"HTTP {r.status_code}")
             data = r.json()
             # v1 backend returns UserResponse on register (no token); v2 returns LoginResponse
             if "token" in data:
@@ -38,7 +39,8 @@ class MarketClient:
         async with httpx.AsyncClient(timeout=10) as c:
             r = await c.post(f"{self.base_url}/api/auth/login", headers=self._headers(),
                              json={"username": username, "password": password})
-            r.raise_for_status()
+            if not r.is_success:
+                raise Exception(r.text or f"HTTP {r.status_code}")
             data = r.json()
             self.token = data["token"]
             self.username = data["user"]["username"]

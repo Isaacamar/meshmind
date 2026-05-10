@@ -143,6 +143,12 @@ public class MarketController {
         return ResponseEntity.ok(Map.of("entries", rows));
     }
 
+    /** Aggregate stats for thesis proof — hit rates, credits, savings estimates. */
+    @GetMapping("/stats")
+    public ResponseEntity<?> stats() {
+        return ResponseEntity.ok(market.stats());
+    }
+
     // ---------- helpers ----------
 
     private static float[] toFloatArray(List<Float> list) {
