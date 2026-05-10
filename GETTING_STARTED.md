@@ -8,7 +8,7 @@ MeshMind runs AI locally on your machine. Your conversations stay private — on
 
 | Requirement | Notes |
 |---|---|
-| **Python 3.10+** | [python.org/downloads](https://www.python.org/downloads/) |
+| **Python 3.10–3.13** | [python.org/downloads](https://www.python.org/downloads/) — **do not use 3.14**, it is too new for a required dependency. Download 3.13 specifically. |
 | **Ollama** | [ollama.com/download](https://ollama.com/download) — available for Mac, Linux, Windows |
 | **A chat model** | Downloaded through the setup script or the in-app model browser |
 
