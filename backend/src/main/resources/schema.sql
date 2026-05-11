@@ -31,10 +31,10 @@ CREATE TABLE IF NOT EXISTS market_entries (
     created_at      TIMESTAMP DEFAULT NOW()
 );
 
--- IVFFlat index for fast cosine similarity search
+-- HNSW index for cosine similarity search (no maintenance_work_mem requirement)
 CREATE INDEX IF NOT EXISTS market_entries_embedding_idx
-    ON market_entries USING ivfflat (embedding vector_cosine_ops)
-    WITH (lists = 100);
+    ON market_entries USING hnsw (embedding vector_cosine_ops)
+    WITH (m = 16, ef_construction = 64);
 
 CREATE INDEX IF NOT EXISTS market_entries_author_idx
     ON market_entries (author_id);

@@ -6,6 +6,7 @@ spring:
   sql:
     init:
       mode: always
+      continue-on-error: true
   jpa:
     hibernate:
       ddl-auto: none    # schema.sql is the source of truth
