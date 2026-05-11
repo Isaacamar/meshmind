@@ -21,13 +21,15 @@ class MarketControllerTest {
 
     private MarketRepository market;
     private UserRepository users;
+    private EmbeddingService embedding;
     private MarketController controller;
 
     @BeforeEach
     void setUp() {
         market = mock(MarketRepository.class);
         users = mock(UserRepository.class);
-        controller = new MarketController(market, users);
+        embedding = mock(EmbeddingService.class);
+        controller = new MarketController(market, users, embedding);
         ReflectionTestUtils.setField(controller, "verbatimThreshold", 0.90);
         ReflectionTestUtils.setField(controller, "repackageThreshold", 0.70);
         ReflectionTestUtils.setField(controller, "publishBonus", 5);
