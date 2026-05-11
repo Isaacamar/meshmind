@@ -28,7 +28,7 @@ No Docker, Java, or database setup is needed for normal use.
 Open the public app: **[meshmind-1.onrender.com](https://meshmind-1.onrender.com)**
 
 1. Register or log in.
-2. Open account settings if you need to update your display name or password.
+2. Open account settings if you need to update your display name, change your password, or delete your account.
 3. Saved chats load from the Render/Postgres cloud backend.
 4. To generate new replies without the local node, paste a Groq API key into **Groq fallback** in the sidebar and save it.
 

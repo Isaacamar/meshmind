@@ -5,6 +5,7 @@ import jakarta.validation.constraints.Size;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -31,6 +32,8 @@ public class UserController {
             @Size(max = 128) String displayName,
             String currentPassword,
             @Size(min = 8) String newPassword) {}
+
+    public record DeleteMeRequest(String currentPassword) {}
 
     @GetMapping("/me")
     public ResponseEntity<?> me(@AuthenticationPrincipal UUID userId) {
@@ -64,6 +67,27 @@ public class UserController {
 
                     User saved = users.save(u);
                     return ResponseEntity.ok(toResponse(saved));
+                })
+                .orElse(ResponseEntity.status(404).body(Map.of("error", "not found")));
+    }
+
+    @DeleteMapping("/me")
+    public ResponseEntity<?> deleteMe(
+            @AuthenticationPrincipal UUID userId,
+            @RequestBody(required = false) DeleteMeRequest req) {
+        return users.findById(userId)
+                .<ResponseEntity<?>>map(u -> {
+                    if (req == null || req.currentPassword() == null || req.currentPassword().isBlank()) {
+                        return ResponseEntity.badRequest()
+                                .body(Map.of("error", "current password required"));
+                    }
+                    if (!encoder.matches(req.currentPassword(), u.getPasswordHash())) {
+                        return ResponseEntity.status(403)
+                                .body(Map.of("error", "current password is incorrect"));
+                    }
+
+                    users.delete(u);
+                    return ResponseEntity.ok(Map.of("deleted", true));
                 })
                 .orElse(ResponseEntity.status(404).body(Map.of("error", "not found")));
     }

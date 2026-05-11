@@ -115,6 +115,7 @@ meshmind-v2/
 | POST | `/api/auth/login` | no | issue JWT |
 | GET | `/api/users/me` | yes | profile + credits |
 | PUT | `/api/users/me` | yes | update display name / password |
+| DELETE | `/api/users/me` | yes | delete account after password confirmation |
 | GET | `/api/chats` | yes | load saved chats |
 | POST | `/api/chats` | yes | save/update a chat |
 | DELETE | `/api/chats/{id}` | yes | delete a saved chat |
@@ -150,7 +151,7 @@ The original MeshMind proposed peer query routing (send my prompt to your RTX 40
 | Milestone | Deliverable |
 |---|---|
 | **Now** | Auth, account management, cloud saved chats, marketplace, local chat, optional Groq fallback |
-| **Next** | Upvote/downvote, stronger Java test coverage |
+| **Next** | Upvote/downvote, broader integration coverage |
 | **Demo** | Render deployment; web-only login/history/Groq flow plus local privacy-first flow |
 | **Stretch** | Agent mode (read/write workspace files, run shell commands with approval) |
 

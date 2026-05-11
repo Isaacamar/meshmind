@@ -132,14 +132,15 @@ docker compose logs db       --tail=20
 | Browser-local chat import | Frontend uploads old `mm_sessions` to cloud on login |
 | Optional Groq fallback | Spring Boot `/api/groq/chat` proxy with user-provided key |
 | Session persistence cache | Frontend localStorage + cloud sync |
+| 19 Java backend unit tests | `backend/src/test/java/` |
 | 21 unit tests for OpenClaw (server + ollama client) | `openclaw/tests/` |
 
 ### ⚠️ Known Gaps (for May 11 Final)
 | Gap | Priority | Notes |
 |---|---|---|
 | **Cloud deployment** | DONE | Render backend, static frontend, and Postgres are deployed |
-| **Java backend unit tests** | HIGH | Requirement: 50% coverage by May 11. Currently 0 Java tests |
-| Account management (update profile/password) | DONE | `PUT /api/users/me` + React profile page |
+| **Java backend unit tests** | DONE | 19 tests cover auth, profile/password/account deletion, and marketplace credit behavior |
+| Account management (update profile/password/delete) | DONE | `PUT /api/users/me`, `DELETE /api/users/me`, and React profile page |
 | Upvote/downvote on entries | Low | Schema has columns, no endpoint |
 | JWT persisted across OpenClaw restart | Low | Browser JWT works for cloud; local OpenClaw token is separate for local-only flows |
 
@@ -217,13 +218,13 @@ docker compose logs db       --tail=20
 | Persistent database | ✅ PostgreSQL 16 + pgvector |
 | User registration + login | ✅ JWT + BCrypt |
 | Cloud hosted (class can access) | ✅ Render backend/static site/Postgres |
-| Basic profile + account management | ✅ Read/update display name and password |
+| Basic profile + account management | ✅ Read/update display name and password; delete account with password confirmation |
 | Saved chats without local node | ✅ Cloud `chats` table + React read-only mode |
 | Fully web-usable chat | ✅ Optional Groq fallback |
 | GitHub PRs + code review | ✅ PR #31 (Amar) + PR #32 (Schertz), merged |
 | ≥75% features complete (Apr 20) | ✅ ~80% feature complete |
-| 25% unit test coverage (Apr 20) | ⚠️ 21 Python tests; 0 Java tests |
-| 50% unit test coverage (May 11) | ❌ Java tests needed |
+| 25% unit test coverage (Apr 20) | ✅ 21 Python tests + 19 Java backend tests |
+| 50% unit test coverage (May 11) | ✅ 19 Java backend tests added for core service behavior |
 
 ---
 
@@ -241,9 +242,9 @@ Paste this as your first message:
 >
 > **How it works:** Login, account management, and saved chats work directly against the Render Spring Boot backend. In local mode, OpenClaw embeds prompts locally via Ollama and sends only embeddings to the marketplace; cached/repackaged/fresh responses are labeled in the UI. In web fallback mode, users can add a Groq key and generate replies from the public site without running OpenClaw. Users can explicitly publish local prompt/response pairs to earn marketplace credits.
 >
-> **Working features:** JWT auth, account management, cloud saved chats, credits ledger, marketplace publish/search/consume, SSE local streaming, optional Groq fallback, multi-model local chat, image+PDF local attachments, temperature control, KaTeX math rendering, context fill bar, per-message token stats, 21 Python unit tests.
+> **Working features:** JWT auth, account management including account deletion, cloud saved chats, credits ledger, marketplace publish/search/consume, SSE local streaming, optional Groq fallback, multi-model local chat, image+PDF local attachments, temperature control, KaTeX math rendering, context fill bar, per-message token stats, 19 Java backend unit tests, and 21 Python unit tests.
 >
-> **Remaining gaps:** Java unit tests and optional upvote/downvote endpoints.
+> **Remaining gaps:** GitHub organization transfer if not done yet, and optional upvote/downvote endpoints.
 >
 > **I need a 5–10 minute final presentation** covering: what we built, why it's interesting, architecture diagram, live demo plan, what's complete vs. what's left, and how it meets the ECE366 project requirements.
 

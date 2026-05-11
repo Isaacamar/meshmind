@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { me, updateMe } from '../api/cloud'
+import { deleteMe, me, updateMe } from '../api/cloud'
 import './ProfilePage.css'
 
 interface ProfileUser {
@@ -12,16 +12,19 @@ interface ProfileUser {
 
 interface Props {
   onCreditsChange?: (credits: number) => void
+  onAccountDeleted?: () => void
 }
 
-export default function ProfilePage({ onCreditsChange }: Props) {
+export default function ProfilePage({ onCreditsChange, onAccountDeleted }: Props) {
   const [user, setUser] = useState<ProfileUser | null>(null)
   const [displayName, setDisplayName] = useState('')
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [deletePassword, setDeletePassword] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
@@ -85,6 +88,30 @@ export default function ProfilePage({ onCreditsChange }: Props) {
       setError(err instanceof Error ? err.message : 'Unable to save account')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const deleteAccount = async () => {
+    setError('')
+    setSuccess('')
+
+    if (!deletePassword) {
+      setError('Current password is required to delete your account')
+      return
+    }
+    const confirmed = window.confirm(
+      'Delete your MeshMind account? This removes your profile, saved chats, marketplace entries, and credits.'
+    )
+    if (!confirmed) return
+
+    setDeleting(true)
+    try {
+      await deleteMe(deletePassword)
+      onAccountDeleted?.()
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Unable to delete account')
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -178,6 +205,34 @@ export default function ProfilePage({ onCreditsChange }: Props) {
                 autoComplete="new-password"
               />
             </label>
+          </div>
+        </section>
+
+        <section className="profile-section danger-section">
+          <div>
+            <h2>Delete account</h2>
+            <p className="danger-copy">
+              Permanently delete your account, saved chats, marketplace posts, and credits.
+            </p>
+          </div>
+          <div className="danger-card">
+            <label>
+              <span>Current password</span>
+              <input
+                type="password"
+                value={deletePassword}
+                onChange={e => setDeletePassword(e.target.value)}
+                autoComplete="current-password"
+              />
+            </label>
+            <button
+              type="button"
+              className="danger-btn"
+              onClick={deleteAccount}
+              disabled={deleting}
+            >
+              {deleting ? 'Deleting...' : 'Delete account'}
+            </button>
           </div>
         </section>
 

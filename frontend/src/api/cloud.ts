@@ -121,6 +121,10 @@ export async function updateMe(body: {
   return user
 }
 
+export async function deleteMe(currentPassword: string): Promise<void> {
+  await req('DELETE', '/api/users/me', { currentPassword })
+}
+
 // ── Cloud chat history ──────────────────────────────────────────────────────
 
 export interface CloudMessage {

@@ -92,11 +92,32 @@ function localToCloudMessages(messages: LocalMessage[]): CloudMessage[] {
 }
 
 const DEFAULT_GROQ_MODEL = 'llama-3.1-8b-instant'
+type SidebarSectionKey = 'setup' | 'models' | 'privacy' | 'groq' | 'tuning' | 'chats'
+
+const DEFAULT_SIDEBAR_COLLAPSED: Record<SidebarSectionKey, boolean> = {
+  setup: false,
+  models: false,
+  privacy: true,
+  groq: false,
+  tuning: true,
+  chats: false,
+}
 
 function getStoredGroq() {
   return {
     key: localStorage.getItem('mm_groq_key') ?? '',
     model: localStorage.getItem('mm_groq_model') ?? DEFAULT_GROQ_MODEL,
+  }
+}
+
+function getStoredSidebarCollapsed(): Record<SidebarSectionKey, boolean> {
+  try {
+    return {
+      ...DEFAULT_SIDEBAR_COLLAPSED,
+      ...JSON.parse(localStorage.getItem('mm_sidebar_collapsed') ?? '{}'),
+    }
+  } catch {
+    return DEFAULT_SIDEBAR_COLLAPSED
   }
 }
 
@@ -124,6 +145,7 @@ export default function App() {
   const [groqKey, setGroqKey] = useState(() => getStoredGroq().key)
   const [groqModel, setGroqModel] = useState(() => getStoredGroq().model)
   const [showGroqKey, setShowGroqKey] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(getStoredSidebarCollapsed)
 
   const RECOMMENDED = [
     { name: 'llama3.2:3b',      size: '~2 GB', desc: 'Fast general chat' },
@@ -273,6 +295,30 @@ export default function App() {
     setView('chat')
   }
 
+  const handleAccountDeleted = () => {
+    cloudLogout()
+    localStorage.removeItem('mm_sessions')
+    localStorage.removeItem('mm_groq_key')
+    Object.keys(localStorage)
+      .filter(key => key.startsWith('mm_cloud_imported_'))
+      .forEach(key => localStorage.removeItem(key))
+    setAuthed(false)
+    setUsername('')
+    setCredits(null)
+    setSessions([])
+    setActiveId(null)
+    setGroqKey('')
+    setView('chat')
+  }
+
+  const toggleSidebarSection = (key: SidebarSectionKey) => {
+    setSidebarCollapsed(prev => {
+      const next = { ...prev, [key]: !prev[key] }
+      localStorage.setItem('mm_sidebar_collapsed', JSON.stringify(next))
+      return next
+    })
+  }
+
   const newSession = () => {
     const model = ollamaOk === true && selectedModel ? selectedModel : `groq:${groqModel}`
     if (!model || (ollamaOk !== true && !groqKey.trim())) return
@@ -353,276 +399,352 @@ export default function App() {
           </div>
         </div>
 
-        {ollamaOk === false && (
-          <div className="ollama-warn">
-            <strong>Local node not ready</strong>
-            {localStatus?.ollama === 'unreachable' ? (
-              <>
-                <span>Ollama is not running. Start it, then refresh.</span>
-                <code>ollama serve</code>
-                <small>Don't have Ollama? Run <code>python3.13 local_node.py install</code> in the repo.</small>
-              </>
-            ) : (
-              <>
-                <span>Missing: <strong>nomic-embed-text</strong> (required for search)</span>
-                <button
-                  className="setup-btn"
-                  onClick={installRequiredModels}
-                  disabled={!!installingModel}
-                >
-                  {installingModel ? `Installing ${installingModel}…` : 'Install now'}
-                </button>
-              </>
-            )}
-            <button className="setup-btn secondary" onClick={() => { refreshLocalStatus(); refreshModels() }}>
-              Refresh
-            </button>
-          </div>
-        )}
-
-        <div className="model-select">
-          <div className="model-select-header">
-            <label>Model</label>
-            <button
-              className="model-browser-toggle"
-              onClick={() => setShowModelBrowser(v => !v)}
-              title="Browse and download models"
-            >
-              {showModelBrowser ? '▲ hide' : '+ get models'}
-            </button>
-          </div>
-          {showModelBrowser && (
-            <div className="model-browser">
-              {RECOMMENDED.map(m => {
-                const installed = localStatus?.installedModels?.some(
-                  n => n === m.name || n.split(':')[0] === m.name.split(':')[0]
-                )
-                return (
-                  <div key={m.name} className="model-browser-row">
-                    <div className="model-browser-info">
-                      <span className="model-browser-name">{m.name}</span>
-                      <span className="model-browser-meta">{m.size} · {m.desc}</span>
-                    </div>
-                    {installed ? (
-                      <span className="model-installed-tick">✓</span>
+        <div className="sidebar-scroll">
+          {ollamaOk === false && (
+            <section className="sidebar-panel warn-shell">
+              <button
+                type="button"
+                className="sidebar-panel-head"
+                onClick={() => toggleSidebarSection('setup')}
+              >
+                <span>Local node</span>
+                <span className="panel-meta">Not ready</span>
+                <span className="panel-caret">{sidebarCollapsed.setup ? '▸' : '▾'}</span>
+              </button>
+              {!sidebarCollapsed.setup && (
+                <div className="sidebar-panel-body">
+                  <div className="ollama-warn">
+                    <strong>Local node not ready</strong>
+                    {localStatus?.ollama === 'unreachable' ? (
+                      <>
+                        <span>Ollama is not running. Start it, then refresh.</span>
+                        <code>ollama serve</code>
+                        <small>Don't have Ollama? Run <code>python3.13 local_node.py install</code> in the repo.</small>
+                      </>
                     ) : (
+                      <>
+                        <span>Missing: <strong>nomic-embed-text</strong> (required for search)</span>
+                        <button
+                          className="setup-btn"
+                          onClick={installRequiredModels}
+                          disabled={!!installingModel}
+                        >
+                          {installingModel ? `Installing ${installingModel}...` : 'Install now'}
+                        </button>
+                      </>
+                    )}
+                    <button className="setup-btn secondary" onClick={() => { refreshLocalStatus(); refreshModels() }}>
+                      Refresh
+                    </button>
+                  </div>
+                </div>
+              )}
+            </section>
+          )}
+
+          <section className="sidebar-panel">
+            <button
+              type="button"
+              className="sidebar-panel-head"
+              onClick={() => toggleSidebarSection('models')}
+            >
+              <span>Model</span>
+              <span className="panel-meta">{models.length ? selectedModel || 'Select' : 'None'}</span>
+              <span className="panel-caret">{sidebarCollapsed.models ? '▸' : '▾'}</span>
+            </button>
+            {!sidebarCollapsed.models && (
+              <div className="sidebar-panel-body model-select">
+                <div className="model-select-header">
+                  <span className="sidebar-field-label">Model</span>
+                  <button
+                    className="model-browser-toggle"
+                    onClick={() => setShowModelBrowser(v => !v)}
+                    title="Browse and download models"
+                  >
+                    {showModelBrowser ? 'hide' : '+ get models'}
+                  </button>
+                </div>
+                {showModelBrowser && (
+                  <div className="model-browser">
+                    {RECOMMENDED.map(m => {
+                      const installed = localStatus?.installedModels?.some(
+                        n => n === m.name || n.split(':')[0] === m.name.split(':')[0]
+                      )
+                      return (
+                        <div key={m.name} className="model-browser-row">
+                          <div className="model-browser-info">
+                            <span className="model-browser-name">{m.name}</span>
+                            <span className="model-browser-meta">{m.size} · {m.desc}</span>
+                          </div>
+                          {installed ? (
+                            <span className="model-installed-tick">✓</span>
+                          ) : (
+                            <button
+                              className="model-pull-btn"
+                              onClick={() => installModel(m.name)}
+                              disabled={!!installingModel || localStatus?.ollama === 'unreachable'}
+                            >
+                              {installingModel === m.name ? '...' : 'Pull'}
+                            </button>
+                          )}
+                        </div>
+                      )
+                    })}
+                    <div className="model-browser-custom">
+                      <input
+                        className="model-custom-input"
+                        placeholder="any ollama model, e.g. deepseek-r1:7b"
+                        value={customModel}
+                        onChange={e => setCustomModel(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter' && customModel.trim()) {
+                            installModel(customModel.trim())
+                            setCustomModel('')
+                          }
+                        }}
+                      />
                       <button
                         className="model-pull-btn"
-                        onClick={() => installModel(m.name)}
-                        disabled={!!installingModel || localStatus?.ollama === 'unreachable'}
+                        onClick={() => { if (customModel.trim()) { installModel(customModel.trim()); setCustomModel('') } }}
+                        disabled={!customModel.trim() || !!installingModel || localStatus?.ollama === 'unreachable'}
                       >
-                        {installingModel === m.name ? '…' : 'Pull'}
+                        Pull
                       </button>
+                    </div>
+                    {installingModel && (
+                      <small className="model-installing-label">Installing {installingModel}...</small>
                     )}
                   </div>
-                )
-              })}
-              <div className="model-browser-custom">
-                <input
-                  className="model-custom-input"
-                  placeholder="any ollama model, e.g. deepseek-r1:7b"
-                  value={customModel}
-                  onChange={e => setCustomModel(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter' && customModel.trim()) {
-                      installModel(customModel.trim())
-                      setCustomModel('')
-                    }
-                  }}
-                />
-                <button
-                  className="model-pull-btn"
-                  onClick={() => { if (customModel.trim()) { installModel(customModel.trim()); setCustomModel('') } }}
-                  disabled={!customModel.trim() || !!installingModel || localStatus?.ollama === 'unreachable'}
-                >
-                  Pull
-                </button>
+                )}
+                <select value={selectedModel} onChange={e => {
+                  const newModel = e.target.value
+                  setSelectedModel(newModel)
+                  if (activeId) {
+                    setSessions(prev => prev.map(s => {
+                      if (s.id !== activeId) return s
+                      // Only insert separator if we actually changed the model and the
+                      // session already has messages (no point flagging a switch on an empty chat)
+                      const changed = s.model !== newModel
+                      const hasMessages = s.messages.length > 0
+                      const separator: LocalMessage | null =
+                        changed && hasMessages
+                          ? { role: 'system', content: `Switched to ${newModel}`, model: newModel }
+                          : null
+                      return {
+                        ...s,
+                        model: newModel,
+                        messages: separator ? [...s.messages, separator] : s.messages,
+                      }
+                    }))
+                  }
+                }}>
+                  {models.length === 0 && <option>No models found</option>}
+                  {models.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+                {selectedModel && (
+                  <div className="model-tags">
+                    {modelTags(selectedModel).map(tag => (
+                      <span
+                        key={tag}
+                        className="model-tag-pill"
+                        style={{ color: TAG_COLORS[tag], borderColor: TAG_COLORS[tag] }}
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
-              {installingModel && (
-                <small className="model-installing-label">Installing {installingModel}…</small>
-              )}
-            </div>
-          )}
-          <select value={selectedModel} onChange={e => {
-            const newModel = e.target.value
-            setSelectedModel(newModel)
-            if (activeId) {
-              setSessions(prev => prev.map(s => {
-                if (s.id !== activeId) return s
-                // Only insert separator if we actually changed the model and the
-                // session already has messages (no point flagging a switch on an empty chat)
-                const changed = s.model !== newModel
-                const hasMessages = s.messages.length > 0
-                const separator: LocalMessage | null =
-                  changed && hasMessages
-                    ? { role: 'system', content: `Switched to ${newModel}`, model: newModel }
-                    : null
-                return {
-                  ...s,
-                  model: newModel,
-                  messages: separator ? [...s.messages, separator] : s.messages,
-                }
-              }))
-            }
-          }}>
-            {models.length === 0 && <option>No models found</option>}
-            {models.map(m => <option key={m} value={m}>{m}</option>)}
-          </select>
-          {selectedModel && (
-            <div className="model-tags">
-              {modelTags(selectedModel).map(tag => (
-                <span
-                  key={tag}
-                  className="model-tag-pill"
-                  style={{ color: TAG_COLORS[tag], borderColor: TAG_COLORS[tag] }}
-                >
-                  {tag}
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
+            )}
+          </section>
 
-        <div className="local-only-toggle">
-          <label className="local-only-label">
-            <span>Local only</span>
-            <span className="local-only-desc">skip marketplace, always infer locally</span>
-          </label>
-          <button
-            className={`toggle-btn ${localOnly ? 'on' : 'off'}`}
-            onClick={() => {
-              const next = !localOnly
-              setLocalOnly(next)
-              localStorage.setItem('mm_local_only', next ? '1' : '0')
-            }}
-          >
-            {localOnly ? 'ON' : 'OFF'}
-          </button>
-        </div>
-
-        <div className="groq-settings">
-          <div className="groq-settings-head">
-            <label>Groq fallback</label>
-            <span className={hasGroq ? 'groq-status on' : 'groq-status'}>
-              {hasGroq ? 'READY' : 'OFF'}
-            </span>
-          </div>
-          <select
-            value={groqModel}
-            onChange={e => {
-              setGroqModel(e.target.value)
-              localStorage.setItem('mm_groq_model', e.target.value)
-            }}
-          >
-            <option value="llama-3.1-8b-instant">llama-3.1-8b-instant</option>
-          </select>
-          <div className="groq-key-row">
-            <input
-              type={showGroqKey ? 'text' : 'password'}
-              value={groqKey}
-              onChange={e => setGroqKey(e.target.value)}
-              onBlur={() => {
-                const trimmed = groqKey.trim()
-                if (trimmed) localStorage.setItem('mm_groq_key', trimmed)
-              }}
-              placeholder="gsk_..."
-            />
+          <section className="sidebar-panel">
             <button
               type="button"
-              onClick={() => setShowGroqKey(v => !v)}
-              title={showGroqKey ? 'Hide key' : 'Show key'}
+              className="sidebar-panel-head"
+              onClick={() => toggleSidebarSection('privacy')}
             >
-              {showGroqKey ? 'Hide' : 'Show'}
+              <span>Privacy</span>
+              <span className="panel-meta">{localOnly ? 'Local only' : 'Marketplace on'}</span>
+              <span className="panel-caret">{sidebarCollapsed.privacy ? '▸' : '▾'}</span>
             </button>
-          </div>
-          <div className="groq-actions">
+            {!sidebarCollapsed.privacy && (
+              <div className="sidebar-panel-body">
+                <div className="local-only-toggle">
+                  <label className="local-only-label">
+                    <span>Local only</span>
+                    <span className="local-only-desc">skip marketplace, always infer locally</span>
+                  </label>
+                  <button
+                    className={`toggle-btn ${localOnly ? 'on' : 'off'}`}
+                    onClick={() => {
+                      const next = !localOnly
+                      setLocalOnly(next)
+                      localStorage.setItem('mm_local_only', next ? '1' : '0')
+                    }}
+                  >
+                    {localOnly ? 'ON' : 'OFF'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </section>
+
+          <section className="sidebar-panel">
             <button
               type="button"
-              onClick={() => {
-                const trimmed = groqKey.trim()
-                if (trimmed) {
-                  localStorage.setItem('mm_groq_key', trimmed)
-                  localStorage.setItem('mm_groq_model', groqModel)
-                }
-              }}
-              disabled={!groqKey.trim()}
+              className="sidebar-panel-head"
+              onClick={() => toggleSidebarSection('groq')}
             >
-              Save key
+              <span>Groq fallback</span>
+              <span className={hasGroq ? 'panel-meta ready' : 'panel-meta'}>{hasGroq ? 'Ready' : 'Off'}</span>
+              <span className="panel-caret">{sidebarCollapsed.groq ? '▸' : '▾'}</span>
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                setGroqKey('')
-                localStorage.removeItem('mm_groq_key')
-              }}
-              disabled={!hasGroq}
-            >
-              Clear
-            </button>
-          </div>
-        </div>
-
-        <div className="temp-slider-wrap">
-          <div className="temp-slider-header">
-            <label>Temperature</label>
-            <span className="temp-label" style={{ color: tempColor(temperature) }}>
-              {tempLabel(temperature)} · {temperature.toFixed(2)}
-            </span>
-          </div>
-          <input
-            type="range"
-            min={0} max={2} step={0.05}
-            value={temperature}
-            onChange={e => setTemperature(parseFloat(e.target.value))}
-            className="temp-slider"
-            style={{ '--thumb-color': tempColor(temperature) } as React.CSSProperties}
-          />
-          <div className="temp-ticks">
-            <span>Precise</span><span>Balanced</span><span>Creative</span><span>Chaotic</span>
-          </div>
-        </div>
-
-        <button className="new-chat-btn" onClick={newSession} disabled={!canStartChat}>
-          {ollamaOk === true ? '+ New Chat' : hasGroq ? '+ New Groq Chat' : 'Add Groq key'}
-        </button>
-
-        <div className="session-list">
-          {chatsLoading && <div className="session-empty">Loading saved chats...</div>}
-          {!chatsLoading && sessions.length === 0 && (
-            <div className="session-empty">No saved chats yet</div>
-          )}
-          {sessions.map(s => (
-            <div
-              key={s.id}
-              className={`session-item ${s.id === activeId ? 'active' : ''}`}
-              onClick={() => { setActiveId(s.id); setView('chat') }}
-            >
-              {renamingId === s.id ? (
-                <input
-                  className="session-rename-input"
-                  value={renameValue}
-                  onChange={e => setRenameValue(e.target.value)}
-                  onBlur={() => commitRename(s.id)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') commitRename(s.id)
-                    if (e.key === 'Escape') setRenamingId(null)
+            {!sidebarCollapsed.groq && (
+              <div className="sidebar-panel-body groq-settings">
+                <select
+                  value={groqModel}
+                  onChange={e => {
+                    setGroqModel(e.target.value)
+                    localStorage.setItem('mm_groq_model', e.target.value)
                   }}
-                  onClick={e => e.stopPropagation()}
-                  autoFocus
+                >
+                  <option value="llama-3.1-8b-instant">llama-3.1-8b-instant</option>
+                </select>
+                <div className="groq-key-row">
+                  <input
+                    type={showGroqKey ? 'text' : 'password'}
+                    value={groqKey}
+                    onChange={e => setGroqKey(e.target.value)}
+                    onBlur={() => {
+                      const trimmed = groqKey.trim()
+                      if (trimmed) localStorage.setItem('mm_groq_key', trimmed)
+                    }}
+                    placeholder="gsk_..."
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowGroqKey(v => !v)}
+                    title={showGroqKey ? 'Hide key' : 'Show key'}
+                  >
+                    {showGroqKey ? 'Hide' : 'Show'}
+                  </button>
+                </div>
+                <div className="groq-actions">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const trimmed = groqKey.trim()
+                      if (trimmed) {
+                        localStorage.setItem('mm_groq_key', trimmed)
+                        localStorage.setItem('mm_groq_model', groqModel)
+                      }
+                    }}
+                    disabled={!groqKey.trim()}
+                  >
+                    Save key
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setGroqKey('')
+                      localStorage.removeItem('mm_groq_key')
+                    }}
+                    disabled={!hasGroq}
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+            )}
+          </section>
+
+          <section className="sidebar-panel">
+            <button
+              type="button"
+              className="sidebar-panel-head"
+              onClick={() => toggleSidebarSection('tuning')}
+            >
+              <span>Temperature</span>
+              <span className="panel-meta" style={{ color: tempColor(temperature) }}>
+                {tempLabel(temperature)} · {temperature.toFixed(2)}
+              </span>
+              <span className="panel-caret">{sidebarCollapsed.tuning ? '▸' : '▾'}</span>
+            </button>
+            {!sidebarCollapsed.tuning && (
+              <div className="sidebar-panel-body temp-slider-wrap">
+                <input
+                  type="range"
+                  min={0} max={2} step={0.05}
+                  value={temperature}
+                  onChange={e => setTemperature(parseFloat(e.target.value))}
+                  className="temp-slider"
+                  style={{ '--thumb-color': tempColor(temperature) } as React.CSSProperties}
                 />
-              ) : (
-                <span className="session-title" onDoubleClick={e => startRename(s, e)}>{s.title}</span>
-              )}
-              <span className="session-model">{s.model.split(':')[0]}</span>
-              <button className="delete-btn" onClick={e => deleteSession(s.id, e)}>✕</button>
-            </div>
-          ))}
+                <div className="temp-ticks">
+                  <span>Precise</span><span>Balanced</span><span>Creative</span><span>Chaotic</span>
+                </div>
+              </div>
+            )}
+          </section>
+
+          <section className="sidebar-panel chats-panel">
+            <button
+              type="button"
+              className="sidebar-panel-head"
+              onClick={() => toggleSidebarSection('chats')}
+            >
+              <span>Chats</span>
+              <span className="panel-meta">{sessions.length}</span>
+              <span className="panel-caret">{sidebarCollapsed.chats ? '▸' : '▾'}</span>
+            </button>
+            {!sidebarCollapsed.chats && (
+              <div className="sidebar-panel-body chats-panel-body">
+                <button className="new-chat-btn" onClick={newSession} disabled={!canStartChat}>
+                  {ollamaOk === true ? '+ New Chat' : hasGroq ? '+ New Groq Chat' : 'Add Groq key'}
+                </button>
+
+                <div className="session-list">
+                  {chatsLoading && <div className="session-empty">Loading saved chats...</div>}
+                  {!chatsLoading && sessions.length === 0 && (
+                    <div className="session-empty">No saved chats yet</div>
+                  )}
+                  {sessions.map(s => (
+                    <div
+                      key={s.id}
+                      className={`session-item ${s.id === activeId ? 'active' : ''}`}
+                      onClick={() => { setActiveId(s.id); setView('chat') }}
+                    >
+                      {renamingId === s.id ? (
+                        <input
+                          className="session-rename-input"
+                          value={renameValue}
+                          onChange={e => setRenameValue(e.target.value)}
+                          onBlur={() => commitRename(s.id)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') commitRename(s.id)
+                            if (e.key === 'Escape') setRenamingId(null)
+                          }}
+                          onClick={e => e.stopPropagation()}
+                          autoFocus
+                        />
+                      ) : (
+                        <span className="session-title" onDoubleClick={e => startRename(s, e)}>{s.title}</span>
+                      )}
+                      <span className="session-model">{s.model.split(':')[0]}</span>
+                      <button className="delete-btn" onClick={e => deleteSession(s.id, e)}>✕</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </section>
         </div>
       </aside>
 
       <main className="main">
         {view === 'account' ? (
-          <ProfilePage onCreditsChange={setCredits} />
+          <ProfilePage onCreditsChange={setCredits} onAccountDeleted={handleAccountDeleted} />
         ) : activeSession ? (
           <Chat
             key={activeSession.id}
