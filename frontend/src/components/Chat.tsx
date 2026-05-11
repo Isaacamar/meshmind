@@ -15,6 +15,7 @@ interface Props {
   onCreditsEarned: (n: number) => void
   temperature: number
   localOnly: boolean
+  readOnly?: boolean
 }
 
 interface Attachment {
@@ -75,7 +76,7 @@ function Markdown({ content }: { content: string }) {
   )
 }
 
-export default function Chat({ session, onUpdate, onCreditsEarned, temperature, localOnly }: Props) {
+export default function Chat({ session, onUpdate, onCreditsEarned, temperature, localOnly, readOnly = false }: Props) {
   // Local message state — updated per-token during streaming, synced to parent on completion
   const [msgs, setMsgs] = useState<LocalMessage[]>(session.messages)
   const [input, setInput] = useState('')
@@ -118,6 +119,7 @@ export default function Chat({ session, onUpdate, onCreditsEarned, temperature, 
   const openFilePicker = () => fileInputRef.current?.click()
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (readOnly) return
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
@@ -164,6 +166,7 @@ export default function Chat({ session, onUpdate, onCreditsEarned, temperature, 
   // ── Send ──────────────────────────────────────────────────────────────────
 
   const send = async () => {
+    if (readOnly) return
     const text = input.trim()
     if ((!text && !attachment) || streaming) return
     setInput('')
@@ -381,8 +384,17 @@ export default function Chat({ session, onUpdate, onCreditsEarned, temperature, 
       <div className="messages" ref={messagesRef}>
         {msgs.length === 0 && !streaming && (
           <div className="chat-hint">
-            Ask anything — embed locally, search the marketplace, get an answer.
-            <br />Attach an image or PDF with the paperclip.
+            {readOnly ? (
+              <>
+                This saved chat is available from the cloud.
+                <br />Start the local node to continue the conversation.
+              </>
+            ) : (
+              <>
+                Ask anything — embed locally, search the marketplace, get an answer.
+                <br />Attach an image or PDF with the paperclip.
+              </>
+            )}
           </div>
         )}
 
@@ -441,7 +453,7 @@ export default function Chat({ session, onUpdate, onCreditsEarned, temperature, 
             </div>
 
             {/* Publish / published */}
-            {m.role === 'assistant' && m.mode === 'miss' && !m.published && m.embedding?.length && (
+            {m.role === 'assistant' && m.mode === 'miss' && !m.published && m.embedding?.length && !readOnly && (
               <button
                 className="publish-btn"
                 onClick={() => publish(i)}
@@ -485,6 +497,11 @@ export default function Chat({ session, onUpdate, onCreditsEarned, temperature, 
       </div>
 
       {/* ── Input area ── */}
+      {readOnly && (
+        <div className="cloud-readonly-banner">
+          Viewing saved cloud chat. Local OpenClaw/Ollama is required to send new messages.
+        </div>
+      )}
       <div className="input-area">
         {/* Attachment preview */}
         {(attachment || attachLoading) && (
@@ -511,7 +528,7 @@ export default function Chat({ session, onUpdate, onCreditsEarned, temperature, 
           <button
             className="attach-btn"
             onClick={openFilePicker}
-            disabled={streaming || attachLoading}
+            disabled={readOnly || streaming || attachLoading}
             title="Attach image (PNG/JPEG) or PDF"
           >
             ⊕
@@ -532,18 +549,20 @@ export default function Chat({ session, onUpdate, onCreditsEarned, temperature, 
             onChange={handleInputChange}
             onKeyDown={onKeyDown}
             placeholder={
-              attachment
+              readOnly
+                ? 'Local node offline — saved chat is read-only'
+                : attachment
                 ? `Add a message for ${attachment.name}… (or press Enter)`
                 : 'Ask anything… (Enter to send, Shift+Enter for newline)'
             }
             rows={1}
-            disabled={streaming}
+            disabled={readOnly || streaming}
           />
 
           <button
             className="send-btn"
             onClick={send}
-            disabled={streaming || (!input.trim() && !attachment)}
+            disabled={readOnly || streaming || (!input.trim() && !attachment)}
           >
             {streaming ? '◼' : '↑'}
           </button>

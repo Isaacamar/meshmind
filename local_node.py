@@ -9,7 +9,7 @@ Works on macOS, Linux, and Windows. Requires Python 3.10+.
   python local_node.py models    # browse and pull extra models interactively
 
 Environment variables (optional):
-  MESHMIND_CLOUD=https://...   URL of the cloud backend (default: http://localhost:8080)
+  MESHMIND_CLOUD=https://...   URL of the cloud backend (default: https://meshmind-g3am.onrender.com)
   OLLAMA_URL=http://...        URL of local Ollama (default: http://localhost:11434)
 """
 from __future__ import annotations

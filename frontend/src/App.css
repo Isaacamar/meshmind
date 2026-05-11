@@ -53,6 +53,22 @@
 }
 .logout-btn:hover { color: #f88; }
 
+.account-btn {
+  background: none;
+  border: none;
+  color: #555;
+  font-size: 0.95rem;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: color 0.15s, background 0.15s;
+}
+.account-btn:hover,
+.account-btn.active {
+  color: #b8adff;
+  background: #242035;
+}
+
 .ollama-warn {
   background: #3a1a00;
   border: 1px solid #7a3800;
@@ -265,6 +281,12 @@
 .new-chat-btn:disabled { background: #444; cursor: not-allowed; }
 
 .session-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+.session-empty {
+  color: #555;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  padding: 8px 10px;
+}
 
 .session-item {
   display: flex;

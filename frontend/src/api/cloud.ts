@@ -1,5 +1,6 @@
-// Spring Boot backend — set VITE_CLOUD_URL in .env.local to override
-const CLOUD = import.meta.env.VITE_CLOUD_URL ?? 'http://localhost:8080'
+// Spring Boot backend — set VITE_CLOUD_URL in .env.local to override.
+// The hosted frontend must work without OpenClaw, so default to the Render API.
+export const CLOUD = (import.meta.env.VITE_CLOUD_URL ?? 'https://meshmind-g3am.onrender.com').replace(/\/$/, '')
 
 function headers(json = false) {
   const token = localStorage.getItem('jwt')
@@ -17,7 +18,12 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
   })
   if (!res.ok) {
     const text = await res.text()
-    throw new Error(text || `${res.status}`)
+    let message = text || `${res.status}`
+    try {
+      const data = JSON.parse(text)
+      message = data.error ?? data.detail ?? message
+    } catch {}
+    throw new Error(message)
   }
   return res.json()
 }
@@ -29,23 +35,37 @@ export interface CloudUser {
   username: string
   email: string
   displayName: string | null
-  avatarUrl: string | null
+  credits: number
+  avatarUrl?: string | null
 }
 
-export async function register(username: string, email: string, password: string): Promise<CloudUser> {
-  return req('POST', '/api/auth/register', { username, email, password })
+export interface AuthResponse {
+  token: string
+  user: CloudUser
 }
 
-export async function login(username: string, password: string): Promise<{ token: string; user: CloudUser }> {
-  const data = await req<{ token: string; user: CloudUser }>('POST', '/api/auth/login', { username, password })
+function storeAuth(data: AuthResponse) {
   localStorage.setItem('jwt', data.token)
   localStorage.setItem('cloudUser', JSON.stringify(data.user))
+  localStorage.setItem('mm_user', JSON.stringify(data.user))
+}
+
+export async function register(username: string, email: string, password: string): Promise<AuthResponse> {
+  const data = await req<AuthResponse>('POST', '/api/auth/register', { username, email, password })
+  storeAuth(data)
+  return data
+}
+
+export async function login(username: string, password: string): Promise<AuthResponse> {
+  const data = await req<AuthResponse>('POST', '/api/auth/login', { username, password })
+  storeAuth(data)
   return data
 }
 
 export function logout() {
   localStorage.removeItem('jwt')
   localStorage.removeItem('cloudUser')
+  localStorage.removeItem('mm_user')
 }
 
 export function getStoredUser(): CloudUser | null {
@@ -55,6 +75,58 @@ export function getStoredUser(): CloudUser | null {
 
 export function isLoggedIn(): boolean {
   return !!localStorage.getItem('jwt')
+}
+
+export async function me(): Promise<CloudUser> {
+  const user = await req<CloudUser>('GET', '/api/users/me')
+  localStorage.setItem('cloudUser', JSON.stringify(user))
+  localStorage.setItem('mm_user', JSON.stringify(user))
+  return user
+}
+
+export async function updateMe(body: {
+  displayName?: string
+  currentPassword?: string
+  newPassword?: string
+}): Promise<CloudUser> {
+  const user = await req<CloudUser>('PUT', '/api/users/me', body)
+  localStorage.setItem('cloudUser', JSON.stringify(user))
+  localStorage.setItem('mm_user', JSON.stringify(user))
+  return user
+}
+
+// ── Cloud chat history ──────────────────────────────────────────────────────
+
+export interface CloudMessage {
+  role: 'user' | 'assistant' | 'system'
+  content: string
+  [key: string]: unknown
+}
+
+export interface CloudChat {
+  id: string
+  title: string
+  model: string | null
+  messages: CloudMessage[]
+  createdAt: string
+  updatedAt: string
+}
+
+export async function getChats(): Promise<CloudChat[]> {
+  return req('GET', '/api/chats')
+}
+
+export async function saveChat(chat: {
+  id: string
+  title: string
+  model: string
+  messages: CloudMessage[]
+}): Promise<CloudChat> {
+  return req('POST', '/api/chats', chat)
+}
+
+export async function deleteChat(id: string): Promise<void> {
+  await req('DELETE', `/api/chats/${id}`)
 }
 
 // ── Nodes ────────────────────────────────────────────────────────────────────

@@ -221,6 +221,16 @@
   padding: 3px 10px; background: #0d2416;
 }
 
+.cloud-readonly-banner {
+  padding: 9px 24px;
+  border-top: 1px solid #283447;
+  background: #101822;
+  color: #8fb5de;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  flex-shrink: 0;
+}
+
 /* ── Input area ────────────────────────────────────────────────────────────── */
 .input-area {
   display: flex;

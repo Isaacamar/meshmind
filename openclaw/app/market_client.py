@@ -9,7 +9,7 @@ from typing import Optional
 
 
 class MarketClient:
-    def __init__(self, base_url: str = "http://localhost:8080"):
+    def __init__(self, base_url: str = "https://meshmind-g3am.onrender.com"):
         self.base_url = base_url.rstrip("/")
         self.token: Optional[str] = None
         self.username: Optional[str] = None
@@ -50,6 +50,23 @@ class MarketClient:
         async with httpx.AsyncClient(timeout=10) as c:
             r = await c.get(f"{self.base_url}/api/users/me", headers=self._headers())
             r.raise_for_status()
+            return r.json()
+
+    async def update_me(self, display_name: Optional[str] = None,
+                        current_password: Optional[str] = None,
+                        new_password: Optional[str] = None) -> dict:
+        body = {}
+        if display_name is not None:
+            body["displayName"] = display_name
+        if current_password is not None:
+            body["currentPassword"] = current_password
+        if new_password is not None:
+            body["newPassword"] = new_password
+
+        async with httpx.AsyncClient(timeout=10) as c:
+            r = await c.put(f"{self.base_url}/api/users/me", headers=self._headers(), json=body)
+            if not r.is_success:
+                raise Exception(r.text or f"HTTP {r.status_code}")
             return r.json()
 
     async def search(self, embedding: list[float], k: int = 3) -> list[dict]:

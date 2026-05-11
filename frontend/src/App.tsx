@@ -1,7 +1,18 @@
 import { useState, useEffect } from 'react'
 import AuthPage from './components/AuthPage'
 import Chat from './components/Chat'
+import ProfilePage from './components/ProfilePage'
 import { apiUrl } from './api/local'
+import {
+  deleteChat as deleteCloudChat,
+  getChats,
+  isLoggedIn,
+  logout as cloudLogout,
+  me,
+  saveChat,
+  type CloudChat,
+  type CloudMessage,
+} from './api/cloud'
 import { modelTags, TAG_COLORS, tempLabel, tempColor } from './utils/models'
 import './App.css'
 
@@ -58,18 +69,33 @@ function saveSessions(sessions: LocalSession[]) {
   localStorage.setItem('mm_sessions', JSON.stringify(sessions))
 }
 
-function getStoredUser(): { username: string } | null {
+function getStoredUser(): { username: string; credits?: number } | null {
   try {
-    return JSON.parse(localStorage.getItem('mm_user') ?? 'null')
+    return JSON.parse(localStorage.getItem('cloudUser') ?? localStorage.getItem('mm_user') ?? 'null')
   } catch {
     return null
   }
 }
 
+function cloudToLocalSession(chat: CloudChat): LocalSession {
+  return {
+    id: chat.id,
+    title: chat.title,
+    model: chat.model || 'saved-chat',
+    messages: chat.messages as LocalMessage[],
+    created_at: chat.createdAt,
+  }
+}
+
+function localToCloudMessages(messages: LocalMessage[]): CloudMessage[] {
+  return messages as CloudMessage[]
+}
+
 export default function App() {
-  const [authed, setAuthed] = useState(() => !!getStoredUser())
+  const [authed, setAuthed] = useState(() => isLoggedIn())
   const [username, setUsername] = useState(() => getStoredUser()?.username ?? '')
-  const [credits, setCredits] = useState<number | null>(null)
+  const [credits, setCredits] = useState<number | null>(() => getStoredUser()?.credits ?? null)
+  const [view, setView] = useState<'chat' | 'account'>('chat')
 
   const [sessions, setSessions] = useState<LocalSession[]>(loadSessions)
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -85,6 +111,7 @@ export default function App() {
   const [customModel, setCustomModel] = useState('')
   const [temperature, setTemperature] = useState(0.7)
   const [localOnly, setLocalOnly] = useState(() => localStorage.getItem('mm_local_only') === '1')
+  const [chatsLoading, setChatsLoading] = useState(false)
 
   const RECOMMENDED = [
     { name: 'llama3.2:3b',      size: '~2 GB', desc: 'Fast general chat' },
@@ -153,16 +180,32 @@ export default function App() {
     }
   }
 
-  // Load models + credits on login
+  // Load local status plus cloud profile/history on login.
   useEffect(() => {
     if (!authed) return
     refreshLocalStatus()
     refreshModels()
 
-    fetch(apiUrl('/api/me'))
-      .then(r => r.json())
-      .then(d => setCredits(d.credits ?? null))
+    me()
+      .then(d => {
+        setUsername(d.username)
+        setCredits(d.credits ?? null)
+      })
+      .catch(() => {
+        cloudLogout()
+        setAuthed(false)
+      })
+
+    setChatsLoading(true)
+    getChats()
+      .then(cloudChats => {
+        const next = cloudChats.map(cloudToLocalSession)
+        setSessions(next)
+        saveSessions(next)
+        setActiveId(prev => prev ?? next[0]?.id ?? null)
+      })
       .catch(() => {})
+      .finally(() => setChatsLoading(false))
   }, [authed])
 
   // Persist sessions to localStorage whenever they change
@@ -180,20 +223,21 @@ export default function App() {
 
   const handleAuth = (user: string) => {
     setUsername(user)
+    setView('chat')
     setAuthed(true)
   }
 
   const handleLogout = async () => {
-    await fetch(apiUrl('/api/login'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: '', password: '' }) }).catch(() => {})
-    localStorage.removeItem('mm_user')
+    cloudLogout()
     setAuthed(false)
     setUsername('')
     setCredits(null)
     setActiveId(null)
+    setView('chat')
   }
 
   const newSession = () => {
-    if (!selectedModel) return
+    if (!selectedModel || ollamaOk !== true) return
     const s: LocalSession = {
       id: crypto.randomUUID(),
       title: 'New chat',
@@ -203,16 +247,20 @@ export default function App() {
     }
     setSessions(prev => [s, ...prev])
     setActiveId(s.id)
+    setView('chat')
+    saveChat({ ...s, messages: localToCloudMessages(s.messages) }).catch(() => {})
   }
 
   const updateSession = (updated: LocalSession) => {
     setSessions(prev => prev.map(s => s.id === updated.id ? updated : s))
+    saveChat({ ...updated, messages: localToCloudMessages(updated.messages) }).catch(() => {})
   }
 
   const deleteSession = (id: string, e: React.MouseEvent) => {
     e.stopPropagation()
     setSessions(prev => prev.filter(s => s.id !== id))
     if (activeId === id) setActiveId(null)
+    deleteCloudChat(id).catch(() => {})
   }
 
   const startRename = (s: LocalSession, e: React.MouseEvent) => {
@@ -223,7 +271,10 @@ export default function App() {
 
   const commitRename = (id: string) => {
     const title = renameValue.trim()
-    if (title) setSessions(prev => prev.map(s => s.id === id ? { ...s, title } : s))
+    if (title) {
+      const session = sessions.find(s => s.id === id)
+      if (session) updateSession({ ...session, title })
+    }
     setRenamingId(null)
   }
 
@@ -232,6 +283,7 @@ export default function App() {
   }
 
   const activeSession = sessions.find(s => s.id === activeId) ?? null
+  const canStartLocalChat = ollamaOk === true && !!selectedModel
 
   if (!authed) return <AuthPage onAuth={handleAuth} />
 
@@ -245,6 +297,13 @@ export default function App() {
             {credits !== null && (
               <span className="credits-badge" title="Marketplace credits">{credits} cr</span>
             )}
+            <button
+              className={`account-btn ${view === 'account' ? 'active' : ''}`}
+              onClick={() => setView('account')}
+              title="Account settings"
+            >
+              ⚙
+            </button>
             <button className="logout-btn" onClick={handleLogout} title="Log out">↪</button>
           </div>
         </div>
@@ -416,16 +475,20 @@ export default function App() {
           </div>
         </div>
 
-        <button className="new-chat-btn" onClick={newSession} disabled={!selectedModel}>
-          + New Chat
+        <button className="new-chat-btn" onClick={newSession} disabled={!canStartLocalChat}>
+          {ollamaOk === true ? '+ New Chat' : 'Local node required'}
         </button>
 
         <div className="session-list">
+          {chatsLoading && <div className="session-empty">Loading saved chats...</div>}
+          {!chatsLoading && sessions.length === 0 && (
+            <div className="session-empty">No saved chats yet</div>
+          )}
           {sessions.map(s => (
             <div
               key={s.id}
               className={`session-item ${s.id === activeId ? 'active' : ''}`}
-              onClick={() => setActiveId(s.id)}
+              onClick={() => { setActiveId(s.id); setView('chat') }}
             >
               {renamingId === s.id ? (
                 <input
@@ -451,7 +514,9 @@ export default function App() {
       </aside>
 
       <main className="main">
-        {activeSession ? (
+        {view === 'account' ? (
+          <ProfilePage onCreditsChange={setCredits} />
+        ) : activeSession ? (
           <Chat
             key={activeSession.id}
             session={activeSession}
@@ -459,15 +524,20 @@ export default function App() {
             onCreditsEarned={onCreditsEarned}
             temperature={temperature}
             localOnly={localOnly}
+            readOnly={ollamaOk !== true}
           />
         ) : (
           <div className="empty-state">
             <div className="empty-icon">⬡</div>
             <h2>Welcome, {username}</h2>
-            <p>Your questions are embedded locally. Only you decide what gets shared.</p>
-            {selectedModel
+            {ollamaOk === true ? (
+              <p>Your questions are embedded locally. Only you decide what gets shared.</p>
+            ) : (
+              <p>Saved chats, profile, and marketplace account data are available from the cloud. Start the local node to create or continue chats.</p>
+            )}
+            {canStartLocalChat
               ? <button className="start-btn" onClick={newSession}>Start a chat with {selectedModel}</button>
-              : <p className="hint">Pull a model: <code>ollama pull qwen2.5-coder:14b</code></p>
+              : <p className="hint">Open a saved chat from the sidebar, or run <code>python3 local_node.py start</code> to chat.</p>
             }
           </div>
         )}

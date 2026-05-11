@@ -63,3 +63,18 @@ CREATE TABLE IF NOT EXISTS consumptions (
 );
 
 CREATE INDEX IF NOT EXISTS consumptions_entry_idx ON consumptions (entry_id);
+
+-- Cloud chat history
+-- Stores completed browser conversations so login + saved-chat access works
+-- without requiring the user's local OpenClaw/Ollama node to be running.
+CREATE TABLE IF NOT EXISTS chats (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title           VARCHAR(160) NOT NULL DEFAULT 'New chat',
+    model           VARCHAR(128),
+    messages        JSONB NOT NULL DEFAULT '[]'::jsonb,
+    created_at      TIMESTAMP DEFAULT NOW(),
+    updated_at      TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS chats_user_updated_idx ON chats (user_id, updated_at DESC);

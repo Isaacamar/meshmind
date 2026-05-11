@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { apiUrl } from '../api/local'
+import { login, register } from '../api/cloud'
 import './AuthPage.css'
 
 interface Props {
@@ -19,36 +19,11 @@ export default function AuthPage({ onAuth }: Props) {
     setError('')
     setLoading(true)
     try {
-      const path = mode === 'login' ? '/api/login' : '/api/register'
-      const body: Record<string, string> = { username, password }
-      if (mode === 'register') body.email = email
+      const data = mode === 'login'
+        ? await login(username, password)
+        : await register(username, email, password)
 
-      const r = await fetch(apiUrl(path), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
-      if (!r.ok) {
-        const text = await r.text()
-        throw new Error(text || `${r.status}`)
-      }
-      const data = await r.json()
-      const user = data.user ?? { username }
-      localStorage.setItem('mm_user', JSON.stringify(user))
-
-      // After register, auto-login
-      if (mode === 'register') {
-        const lr = await fetch(apiUrl('/api/login'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username, password }),
-        })
-        if (!lr.ok) throw new Error('Registered but login failed')
-        const ld = await lr.json()
-        localStorage.setItem('mm_user', JSON.stringify(ld.user ?? { username }))
-      }
-
-      onAuth(username)
+      onAuth(data.user.username)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Something went wrong')
     } finally {

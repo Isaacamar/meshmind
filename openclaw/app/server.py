@@ -46,7 +46,7 @@ async def private_network_access_headers(request, call_next):
     return response
 
 
-CLOUD_URL = os.environ.get("MESHMIND_CLOUD", "http://localhost:8080")
+CLOUD_URL = os.environ.get("MESHMIND_CLOUD", "https://meshmind-g3am.onrender.com")
 market = MarketClient(CLOUD_URL)
 REQUIRED_MODELS = ["nomic-embed-text"]
 RECOMMENDED_MODELS = [
@@ -61,6 +61,12 @@ class AuthRequest(BaseModel):
     username: str
     email: Optional[str] = None
     password: str
+
+
+class UpdateMeRequest(BaseModel):
+    displayName: Optional[str] = None
+    currentPassword: Optional[str] = None
+    newPassword: Optional[str] = None
 
 
 @app.post("/api/register")
@@ -189,6 +195,16 @@ async def me():
     if not market.token:
         raise HTTPException(401, "not logged in")
     return await market.me()
+
+
+@app.put("/api/me")
+async def update_me(req: UpdateMeRequest):
+    if not market.token:
+        raise HTTPException(401, "not logged in")
+    try:
+        return await market.update_me(req.displayName, req.currentPassword, req.newPassword)
+    except Exception as e:
+        raise HTTPException(400, str(e))
 
 
 # ----- the core marketplace flow -----
