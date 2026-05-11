@@ -119,7 +119,8 @@ meshmind-v2/
 | GET | `/api/chats` | yes | load saved chats |
 | POST | `/api/chats` | yes | save/update a chat |
 | DELETE | `/api/chats/{id}` | yes | delete a saved chat |
-| POST | `/api/market/search` | yes | top-k by embedding |
+| POST | `/api/market/search` | no | top-k by embedding (local node path) |
+| POST | `/api/market/search/text` | no | top-k by raw text — server embeds via Nomic (Groq path) |
 | POST | `/api/market/publish` | yes | add entry, earn bonus |
 | POST | `/api/market/consume` | yes | record use, pay royalty |
 | GET | `/api/market/mine` | yes | own published entries |

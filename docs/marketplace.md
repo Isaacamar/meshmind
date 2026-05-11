@@ -8,10 +8,12 @@ This is the moat. It gets stronger the more users publish. Peer routing doesn't 
 
 ## Three-mode `/api/ask`
 
+### Local node path (Ollama running)
+
 ```
 prompt
   │
-  ▼ local embed (nomic-embed-text, 768 dims)
+  ▼ local embed (nomic-embed-text, 768 dims) — text stays on device
   │
   ▼ POST /api/market/search {embedding, k=3}
   │
@@ -29,6 +31,27 @@ response        as context     response
 /consume        /consume       (offer publish)
 (pay author)    (pay author)   (earn bonus)
 ```
+
+### Groq fallback path (no local Ollama)
+
+```
+prompt
+  │
+  ▼ POST /api/market/search/text {text, k=3}  ← server computes embedding
+  │   (Nomic Atlas API, nomic-embed-text-v1, 768 dims)
+  │
+  ┌──────────────┬──────────────┬────────────┐
+  ▼              ▼              ▼            ▼
+sim ≥ 0.90     0.70–0.90     < 0.70       endpoint offline
+verbatim       repackage      miss         skip to Groq
+  │              │              │
+  ▼              ▼              ▼
+return          Groq adapts    Groq fresh
+cached          cached         response
+response        response
+```
+
+**Privacy note for this path:** the raw prompt text travels to the render backend for embedding (then to Nomic's API). This is the accepted tradeoff for users who have opted into Groq cloud mode — they have no local compute to embed on-device. Local node users are unaffected.
 
 ### Repackage prompt template
 
@@ -68,7 +91,7 @@ Room to tighten later: rate-limited free searches, paid search above quota, upvo
 
 ## pgvector choices
 
-- **IVFFlat** index with `lists=100`. Fine up to ~100k entries. Revisit HNSW if it grows.
+- **HNSW** index (`m=16`, `ef_construction=64`). Better recall and query latency than IVFFlat for this workload. No training step required on insert.
 - **Cosine distance** (`<=>` operator), converted to similarity as `1 - distance`.
 - Index is created in `schema.sql` and loaded at container init.
 

@@ -8,7 +8,9 @@ This document describes MeshMind's system architecture, data flow, and the bound
 
 > The relay server must never be able to read a user's AI conversation content.
 
-This constraint shapes every architectural decision. The cloud server stores accounts, group memberships, and node status. It relays peer messages as opaque encrypted blobs. It has no access to prompt text, response text, or file content.
+This constraint shapes every architectural decision. The cloud server stores accounts, group memberships, and node status. It relays peer messages as opaque encrypted blobs.
+
+**Exception — Groq fallback mode:** Users without a local Ollama who opt into Groq mode send their prompt text to the render backend for server-side embedding (`POST /api/market/search/text`). This is a deliberate tradeoff: Groq mode is inherently cloud-dependent, so the on-device privacy guarantee does not apply. Local node users are never affected — their prompts are embedded locally and only the 768-dim vector is sent to the cloud.
 
 ---
 

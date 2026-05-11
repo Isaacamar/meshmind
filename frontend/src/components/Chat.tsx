@@ -5,7 +5,7 @@ import rehypeKatex from 'rehype-katex'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import type { LocalMessage, LocalSession } from '../App'
-import { groqChat, publishMarketEntry, type GroqChatMessage } from '../api/cloud'
+import { groqChat, publishMarketEntry, searchMarketByText, type GroqChatMessage } from '../api/cloud'
 import { apiUrl } from '../api/local'
 import { modelColor, contextWindowSize, ctxFillColor, ctxWarning } from '../utils/models'
 import './Chat.css'
@@ -233,6 +233,63 @@ export default function Chat({
     try {
       if (isGroq) {
         if (!groqApiKey) throw new Error('Groq API key required')
+
+        const groqSessionModel = session.model.startsWith('groq:') ? session.model : `groq:${groqModel}`
+
+        // Try marketplace cache on first message with no attachment
+        if (isFirst && !att) {
+          try {
+            const market = await searchMarketByText(prompt)
+            const top = market.results[0]
+            if (top && top.mode === 'verbatim') {
+              const assistantMsg: LocalMessage = {
+                role: 'assistant',
+                content: top.response,
+                model: groqSessionModel,
+                mode: 'verbatim',
+                source_author: top.author,
+                similarity: top.similarity,
+                source_entry_id: top.id,
+                published: false,
+              }
+              const finalMsgs = [...msgs, userMsg, assistantMsg]
+              setMsgs(finalMsgs)
+              onUpdate({ ...session, model: groqSessionModel, title: newTitle, messages: finalMsgs })
+              return
+            }
+            if (top && top.mode === 'repackage') {
+              const data = await groqChat({
+                apiKey: groqApiKey,
+                model: groqModel,
+                messages: [
+                  { role: 'system', content: "You are a helpful assistant. Adapt the provided answer to directly address the user's question. Keep it concise and accurate." },
+                  { role: 'user', content: `User asked: "${prompt}"\n\nAdapt this similar answer:\n\n${top.response}` },
+                ],
+                temperature,
+              })
+              const assistantMsg: LocalMessage = {
+                role: 'assistant',
+                content: data.content,
+                model: groqSessionModel,
+                mode: 'repackage',
+                source_author: top.author,
+                similarity: top.similarity,
+                source_entry_id: top.id,
+                tokensIn: data.usage?.prompt_tokens,
+                tokensOut: data.usage?.completion_tokens,
+                toksPerSec: null,
+                published: false,
+              }
+              const finalMsgs = [...msgs, userMsg, assistantMsg]
+              setMsgs(finalMsgs)
+              onUpdate({ ...session, model: groqSessionModel, title: newTitle, messages: finalMsgs })
+              return
+            }
+          } catch {
+            // marketplace unavailable — fall through to full Groq inference
+          }
+        }
+
         const groqMessages: GroqChatMessage[] = [
           {
             role: 'system',
@@ -255,7 +312,7 @@ export default function Chat({
         const assistantMsg: LocalMessage = {
           role: 'assistant',
           content: data.content,
-          model: `groq:${data.model || groqModel}`,
+          model: groqSessionModel,
           mode: 'groq',
           tokensIn: data.usage?.prompt_tokens,
           tokensOut: data.usage?.completion_tokens,
@@ -264,7 +321,7 @@ export default function Chat({
         }
         const finalMsgs = [...msgs, userMsg, assistantMsg]
         setMsgs(finalMsgs)
-        onUpdate({ ...session, model: session.model.startsWith('groq:') ? session.model : `groq:${groqModel}`, title: newTitle, messages: finalMsgs })
+        onUpdate({ ...session, model: groqSessionModel, title: newTitle, messages: finalMsgs })
         return
       }
 

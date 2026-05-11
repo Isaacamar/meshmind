@@ -81,10 +81,12 @@ Every response shows how it was generated:
 | Badge | Meaning |
 |---|---|
 | `✗ Fresh inference` | Full local inference — your GPU did the work |
-| `↻ Repackaged` | A similar cached answer was adapted locally (~10x fewer tokens) |
+| `↻ Repackaged` | A similar cached answer was adapted (~10x fewer tokens) |
 | `✓ Cached answer` | Exact match found in the marketplace — 0 inference tokens |
 | `⬡ Local only` | Local-only mode is ON — marketplace bypassed entirely |
-| `⚡ Groq fallback` | Response was generated through your configured Groq key |
+| `⚡ Groq fallback` | Response was generated via Groq with no marketplace match |
+
+`✓ Cached answer` and `↻ Repackaged` can appear in both local mode and Groq mode. In Groq mode the marketplace search runs server-side.
 
 ### Local only mode
 
@@ -94,7 +96,7 @@ Toggle **Local only** in the sidebar to skip the marketplace entirely. All respo
 
 After a fresh inference, a **Publish** button appears. Publishing adds your prompt and response to the shared marketplace and earns you **+5 credits**. Every time someone else's query matches your entry, you earn **+1 credit**.
 
-Publishing goes directly to the Render backend with your browser login token. If you generated a response through Groq, marketplace publishing is hidden because there is no local embedding for that prompt yet.
+Publishing goes directly to the Render backend with your browser login token. If you generated a response through Groq, marketplace publishing is hidden — the embedding is computed server-side for search but is not attached to Groq responses for publishing.
 
 ---
 

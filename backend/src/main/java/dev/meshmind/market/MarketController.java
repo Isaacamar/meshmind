@@ -26,6 +26,7 @@ public class MarketController {
 
     private final MarketRepository market;
     private final UserRepository users;
+    private final EmbeddingService embedding;
 
     @Value("${meshmind.marketplace.verbatim-threshold}")
     private double verbatimThreshold;
@@ -42,9 +43,10 @@ public class MarketController {
     @Value("${meshmind.marketplace.embedding-dims}")
     private int embeddingDims;
 
-    public MarketController(MarketRepository market, UserRepository users) {
+    public MarketController(MarketRepository market, UserRepository users, EmbeddingService embedding) {
         this.market = market;
         this.users = users;
+        this.embedding = embedding;
     }
 
     // ---------- DTOs ----------
@@ -61,6 +63,10 @@ public class MarketController {
             List<String> tags) {}
 
     public record ConsumeRequest(@NotNull UUID entryId) {}
+
+    public record TextSearchRequest(
+            @NotBlank String text,
+            Integer k) {}
 
     // ---------- Endpoints ----------
 
@@ -95,6 +101,24 @@ public class MarketController {
             );
         }).toList();
         return ResponseEntity.ok(Map.of("results", results));
+    }
+
+    /**
+     * Search by raw text — server computes the embedding via Nomic Atlas API.
+     * Used by Groq-mode clients that have no local Ollama to embed.
+     */
+    @PostMapping("/search/text")
+    public ResponseEntity<?> searchByText(@Valid @RequestBody TextSearchRequest req) {
+        if (!embedding.isConfigured()) {
+            return ResponseEntity.status(503).body(Map.of("error", "server-side embedding not configured"));
+        }
+        List<Float> vec;
+        try {
+            vec = embedding.embed(req.text());
+        } catch (Exception e) {
+            return ResponseEntity.status(502).body(Map.of("error", "embedding failed: " + e.getMessage()));
+        }
+        return search(new SearchRequest(vec, req.k()));
     }
 
     /**

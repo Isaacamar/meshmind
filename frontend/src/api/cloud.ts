@@ -161,6 +161,24 @@ export async function deleteChat(id: string): Promise<void> {
 
 // ── Marketplace ─────────────────────────────────────────────────────────────
 
+export interface MarketSearchResult {
+  id: string
+  author: string
+  prompt: string
+  response: string
+  modelUsed: string
+  similarity: number
+  mode: 'verbatim' | 'repackage' | 'miss'
+  consumeCount: number
+}
+
+export async function searchMarketByText(
+  text: string,
+  k = 3,
+): Promise<{ results: MarketSearchResult[] }> {
+  return req('POST', '/api/market/search/text', { text, k })
+}
+
 export async function publishMarketEntry(body: {
   prompt: string
   response: string

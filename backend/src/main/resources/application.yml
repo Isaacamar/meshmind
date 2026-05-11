@@ -24,6 +24,8 @@ meshmind:
   jwt:
     secret: ${JWT_SECRET:changeme-replace-in-production-at-least-32-chars}
     expiration-hours: 168     # 7 days
+  nomic:
+    api-key: ${NOMIC_API_KEY:}
   marketplace:
     embedding-dims: 768
     verbatim-threshold: 0.90
