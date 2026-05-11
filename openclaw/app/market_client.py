@@ -69,9 +69,13 @@ class MarketClient:
                 raise Exception(r.text or f"HTTP {r.status_code}")
             return r.json()
 
-    async def search(self, embedding: list[float], k: int = 3) -> list[dict]:
+    async def search(self, embedding: list[float], k: int = 3,
+                     token: Optional[str] = None) -> list[dict]:
+        headers = self._headers()
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
         async with httpx.AsyncClient(timeout=15) as c:
-            r = await c.post(f"{self.base_url}/api/market/search", headers=self._headers(),
+            r = await c.post(f"{self.base_url}/api/market/search", headers=headers,
                              json={"embedding": embedding, "k": k})
             r.raise_for_status()
             return r.json()["results"]

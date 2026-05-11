@@ -14,7 +14,7 @@ Run: uvicorn app.server:app --reload --port 8000
 """
 from __future__ import annotations
 
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, Header, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel
@@ -396,7 +396,8 @@ async def _stream_ask(prompt: str, chat_model: str,
                       image_b64: Optional[str] = None,
                       history: Optional[list[HistoryMessage]] = None,
                       temperature: float = 0.7,
-                      local_only: bool = False):
+                      local_only: bool = False,
+                      effective_token: Optional[str] = None):
     """SSE generator:
     - local_only=True: skip embed + marketplace, always do full local inference
     - Single-turn (no history): embed → marketplace → verbatim/repackage/miss
@@ -412,9 +413,10 @@ async def _stream_ask(prompt: str, chat_model: str,
 
     # local_only, multi-turn, and vision all bypass the marketplace
     hits = []
-    if market.token and not local_only and not image_b64 and not has_history:
+    search_token = effective_token or market.token
+    if search_token and not local_only and not image_b64 and not has_history:
         try:
-            hits = await market.search(embedding, k=5)
+            hits = await market.search(embedding, k=5, token=search_token)
         except Exception:
             pass
 
@@ -507,10 +509,16 @@ async def _stream_ask(prompt: str, chat_model: str,
 
 
 @app.post("/api/ask/stream")
-async def ask_stream(req: StreamAskRequest):
+async def ask_stream(req: StreamAskRequest, authorization: Optional[str] = Header(None)):
     chat_model = req.model or ollama_client.DEFAULT_CHAT_MODEL
+    effective_token = market.token
+    if not effective_token and authorization:
+        parts = authorization.split(" ", 1)
+        if len(parts) == 2 and parts[0].lower() == "bearer":
+            effective_token = parts[1]
     return StreamingResponse(
-        _stream_ask(req.prompt, chat_model, req.image_b64, req.history, req.temperature, req.local_only),
+        _stream_ask(req.prompt, chat_model, req.image_b64, req.history,
+                    req.temperature, req.local_only, effective_token),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

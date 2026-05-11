@@ -325,9 +325,13 @@ export default function Chat({
         return
       }
 
+      const jwt = localStorage.getItem('jwt')
       const r = await fetch(apiUrl('/api/ask/stream'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}),
+        },
         body: JSON.stringify({
           prompt,
           model: session.model,
