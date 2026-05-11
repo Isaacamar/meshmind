@@ -10,7 +10,7 @@ The core design of MeshMind ensures that user prompts never leave their machine 
 
 ## 2. Securing User Credentials — 1.03
 
-User passwords are hashed with BCrypt before storage and never appear in logs or API responses. Session management uses signed JWT tokens with a 7-day expiry. The token is held in memory by the local OpenClaw node and never persisted to disk or transmitted in URLs, limiting the blast radius of a credential compromise.
+User passwords are hashed with BCrypt before storage and never appear in logs or API responses. Session management uses signed JWT tokens with a 7-day expiry. The browser stores the JWT for cloud account, profile, marketplace, and saved-chat access; tokens are never transmitted in URLs.
 
 ## 3. User Autonomy Over Local Resources — 1.02
 
@@ -30,7 +30,11 @@ OpenClaw has 21 unit tests covering server routes and the Ollama client, run wit
 
 ## 7. Minimal Data Collection — 1.02
 
-The cloud backend stores only what is necessary: hashed credentials, embeddings, published responses, and credit ledger entries. It does not log plaintext queries, IP addresses, or session metadata. Unpublished conversations exist only in the user's browser localStorage and are never transmitted.
+The cloud backend stores only what is necessary for the deployed product: hashed credentials, account metadata, saved chat history, published marketplace entries, embeddings for published entries, and credit ledger rows. This is a deliberate tradeoff so users can log in from the public site and reopen chats without running a local node. Marketplace publishing remains explicit.
+
+## 7a. Optional Cloud Inference Disclosure — 1.04
+
+Groq fallback is opt-in. When the user saves a Groq API key and sends a fallback chat, the prompt and recent conversation context are sent through the MeshMind Spring Boot backend to Groq's Chat Completions API. MeshMind does not store the Groq key; it is kept in the user's browser and forwarded only for that request. The UI labels Groq-generated replies so users can distinguish web fallback from local private inference.
 
 ## 8. Responsible Local Inference — 3.02
 

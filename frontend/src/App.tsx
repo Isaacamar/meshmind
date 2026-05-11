@@ -21,7 +21,7 @@ export interface LocalMessage {
   content: string
   // Which model generated this response (assistant messages only)
   model?: string
-  mode?: 'verbatim' | 'repackage' | 'miss'
+  mode?: 'verbatim' | 'repackage' | 'miss' | 'local' | 'groq'
   source_author?: string
   similarity?: number
   source_entry_id?: string
@@ -91,6 +91,15 @@ function localToCloudMessages(messages: LocalMessage[]): CloudMessage[] {
   return messages as CloudMessage[]
 }
 
+const DEFAULT_GROQ_MODEL = 'llama-3.1-8b-instant'
+
+function getStoredGroq() {
+  return {
+    key: localStorage.getItem('mm_groq_key') ?? '',
+    model: localStorage.getItem('mm_groq_model') ?? DEFAULT_GROQ_MODEL,
+  }
+}
+
 export default function App() {
   const [authed, setAuthed] = useState(() => isLoggedIn())
   const [username, setUsername] = useState(() => getStoredUser()?.username ?? '')
@@ -112,6 +121,9 @@ export default function App() {
   const [temperature, setTemperature] = useState(0.7)
   const [localOnly, setLocalOnly] = useState(() => localStorage.getItem('mm_local_only') === '1')
   const [chatsLoading, setChatsLoading] = useState(false)
+  const [groqKey, setGroqKey] = useState(() => getStoredGroq().key)
+  const [groqModel, setGroqModel] = useState(() => getStoredGroq().model)
+  const [showGroqKey, setShowGroqKey] = useState(false)
 
   const RECOMMENDED = [
     { name: 'llama3.2:3b',      size: '~2 GB', desc: 'Fast general chat' },
@@ -180,6 +192,36 @@ export default function App() {
     }
   }
 
+  const importLocalSessions = async (userId: string) => {
+    const importedKey = `mm_cloud_imported_${userId}`
+    if (localStorage.getItem(importedKey) === '1') return
+
+    const localSessions = loadSessions().filter(s => s.messages.length > 0)
+    if (localSessions.length === 0) {
+      localStorage.setItem(importedKey, '1')
+      return
+    }
+
+    await Promise.allSettled(localSessions.map(s => saveChat({
+      ...s,
+      messages: localToCloudMessages(s.messages),
+    })))
+    localStorage.setItem(importedKey, '1')
+  }
+
+  const loadCloudChats = async () => {
+    setChatsLoading(true)
+    try {
+      const cloudChats = await getChats()
+      const next = cloudChats.map(cloudToLocalSession)
+      setSessions(next)
+      saveSessions(next)
+      setActiveId(prev => prev ?? next[0]?.id ?? null)
+    } finally {
+      setChatsLoading(false)
+    }
+  }
+
   // Load local status plus cloud profile/history on login.
   useEffect(() => {
     if (!authed) return
@@ -187,25 +229,20 @@ export default function App() {
     refreshModels()
 
     me()
-      .then(d => {
+      .then(async d => {
         setUsername(d.username)
         setCredits(d.credits ?? null)
+        try {
+          await importLocalSessions(d.id)
+          await loadCloudChats()
+        } catch {
+          setChatsLoading(false)
+        }
       })
       .catch(() => {
         cloudLogout()
         setAuthed(false)
       })
-
-    setChatsLoading(true)
-    getChats()
-      .then(cloudChats => {
-        const next = cloudChats.map(cloudToLocalSession)
-        setSessions(next)
-        saveSessions(next)
-        setActiveId(prev => prev ?? next[0]?.id ?? null)
-      })
-      .catch(() => {})
-      .finally(() => setChatsLoading(false))
   }, [authed])
 
   // Persist sessions to localStorage whenever they change
@@ -237,11 +274,12 @@ export default function App() {
   }
 
   const newSession = () => {
-    if (!selectedModel || ollamaOk !== true) return
+    const model = ollamaOk === true && selectedModel ? selectedModel : `groq:${groqModel}`
+    if (!model || (ollamaOk !== true && !groqKey.trim())) return
     const s: LocalSession = {
       id: crypto.randomUUID(),
       title: 'New chat',
-      model: selectedModel,
+      model,
       messages: [],
       created_at: new Date().toISOString(),
     }
@@ -283,7 +321,14 @@ export default function App() {
   }
 
   const activeSession = sessions.find(s => s.id === activeId) ?? null
-  const canStartLocalChat = ollamaOk === true && !!selectedModel
+  const hasGroq = !!groqKey.trim()
+  const canStartChat = (ollamaOk === true && !!selectedModel) || hasGroq
+  const activeChatMode: 'local' | 'groq' | 'readonly' =
+    activeSession && ollamaOk === true && !activeSession.model.startsWith('groq:')
+      ? 'local'
+      : hasGroq
+        ? 'groq'
+        : 'readonly'
 
   if (!authed) return <AuthPage onAuth={handleAuth} />
 
@@ -315,7 +360,7 @@ export default function App() {
               <>
                 <span>Ollama is not running. Start it, then refresh.</span>
                 <code>ollama serve</code>
-                <small>Don't have Ollama? Run <code>python local_node.py</code> in the repo.</small>
+                <small>Don't have Ollama? Run <code>python3.13 local_node.py install</code> in the repo.</small>
               </>
             ) : (
               <>
@@ -455,6 +500,68 @@ export default function App() {
           </button>
         </div>
 
+        <div className="groq-settings">
+          <div className="groq-settings-head">
+            <label>Groq fallback</label>
+            <span className={hasGroq ? 'groq-status on' : 'groq-status'}>
+              {hasGroq ? 'READY' : 'OFF'}
+            </span>
+          </div>
+          <select
+            value={groqModel}
+            onChange={e => {
+              setGroqModel(e.target.value)
+              localStorage.setItem('mm_groq_model', e.target.value)
+            }}
+          >
+            <option value="llama-3.1-8b-instant">llama-3.1-8b-instant</option>
+          </select>
+          <div className="groq-key-row">
+            <input
+              type={showGroqKey ? 'text' : 'password'}
+              value={groqKey}
+              onChange={e => setGroqKey(e.target.value)}
+              onBlur={() => {
+                const trimmed = groqKey.trim()
+                if (trimmed) localStorage.setItem('mm_groq_key', trimmed)
+              }}
+              placeholder="gsk_..."
+            />
+            <button
+              type="button"
+              onClick={() => setShowGroqKey(v => !v)}
+              title={showGroqKey ? 'Hide key' : 'Show key'}
+            >
+              {showGroqKey ? 'Hide' : 'Show'}
+            </button>
+          </div>
+          <div className="groq-actions">
+            <button
+              type="button"
+              onClick={() => {
+                const trimmed = groqKey.trim()
+                if (trimmed) {
+                  localStorage.setItem('mm_groq_key', trimmed)
+                  localStorage.setItem('mm_groq_model', groqModel)
+                }
+              }}
+              disabled={!groqKey.trim()}
+            >
+              Save key
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setGroqKey('')
+                localStorage.removeItem('mm_groq_key')
+              }}
+              disabled={!hasGroq}
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+
         <div className="temp-slider-wrap">
           <div className="temp-slider-header">
             <label>Temperature</label>
@@ -475,8 +582,8 @@ export default function App() {
           </div>
         </div>
 
-        <button className="new-chat-btn" onClick={newSession} disabled={!canStartLocalChat}>
-          {ollamaOk === true ? '+ New Chat' : 'Local node required'}
+        <button className="new-chat-btn" onClick={newSession} disabled={!canStartChat}>
+          {ollamaOk === true ? '+ New Chat' : hasGroq ? '+ New Groq Chat' : 'Add Groq key'}
         </button>
 
         <div className="session-list">
@@ -524,7 +631,10 @@ export default function App() {
             onCreditsEarned={onCreditsEarned}
             temperature={temperature}
             localOnly={localOnly}
-            readOnly={ollamaOk !== true}
+            readOnly={activeChatMode === 'readonly'}
+            chatMode={activeChatMode}
+            groqApiKey={groqKey.trim()}
+            groqModel={groqModel}
           />
         ) : (
           <div className="empty-state">
@@ -535,9 +645,9 @@ export default function App() {
             ) : (
               <p>Saved chats, profile, and marketplace account data are available from the cloud. Start the local node to create or continue chats.</p>
             )}
-            {canStartLocalChat
-              ? <button className="start-btn" onClick={newSession}>Start a chat with {selectedModel}</button>
-              : <p className="hint">Open a saved chat from the sidebar, or run <code>python3 local_node.py start</code> to chat.</p>
+            {canStartChat
+              ? <button className="start-btn" onClick={newSession}>Start a chat with {ollamaOk === true ? selectedModel : groqModel}</button>
+              : <p className="hint">Open a saved chat, run <code>python3 local_node.py start</code>, or add a Groq key.</p>
             }
           </div>
         )}

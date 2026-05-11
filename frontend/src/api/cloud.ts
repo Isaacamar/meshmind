@@ -28,6 +28,32 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
   return res.json()
 }
 
+async function reqWithHeaders<T>(
+  method: string,
+  path: string,
+  extraHeaders: Record<string, string>,
+  body?: unknown,
+): Promise<T> {
+  const res = await fetch(`${CLOUD}${path}`, {
+    method,
+    headers: {
+      ...headers(!!body),
+      ...extraHeaders,
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    let message = text || `${res.status}`
+    try {
+      const data = JSON.parse(text)
+      message = data.error ?? data.detail ?? message
+    } catch {}
+    throw new Error(message)
+  }
+  return res.json()
+}
+
 // ── Auth ─────────────────────────────────────────────────────────────────────
 
 export interface CloudUser {
@@ -127,6 +153,48 @@ export async function saveChat(chat: {
 
 export async function deleteChat(id: string): Promise<void> {
   await req('DELETE', `/api/chats/${id}`)
+}
+
+// ── Marketplace ─────────────────────────────────────────────────────────────
+
+export async function publishMarketEntry(body: {
+  prompt: string
+  response: string
+  modelUsed?: string
+  embedding: number[]
+  tags?: string[]
+}): Promise<{ id: string; creditsEarned: number }> {
+  return req('POST', '/api/market/publish', body)
+}
+
+// ── Groq fallback ───────────────────────────────────────────────────────────
+
+export interface GroqChatMessage {
+  role: 'system' | 'user' | 'assistant'
+  content: string
+}
+
+export interface GroqChatResponse {
+  content: string
+  model: string
+  usage?: {
+    prompt_tokens?: number
+    completion_tokens?: number
+    total_tokens?: number
+  }
+}
+
+export async function groqChat(body: {
+  apiKey: string
+  model: string
+  messages: GroqChatMessage[]
+  temperature: number
+}): Promise<GroqChatResponse> {
+  return reqWithHeaders('POST', '/api/groq/chat', { 'X-Groq-Api-Key': body.apiKey }, {
+    model: body.model,
+    messages: body.messages,
+    temperature: body.temperature,
+  })
 }
 
 // ── Nodes ────────────────────────────────────────────────────────────────────

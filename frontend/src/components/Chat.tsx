@@ -5,6 +5,7 @@ import rehypeKatex from 'rehype-katex'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import type { LocalMessage, LocalSession } from '../App'
+import { groqChat, publishMarketEntry, type GroqChatMessage } from '../api/cloud'
 import { apiUrl } from '../api/local'
 import { modelColor, contextWindowSize, ctxFillColor, ctxWarning } from '../utils/models'
 import './Chat.css'
@@ -16,6 +17,9 @@ interface Props {
   temperature: number
   localOnly: boolean
   readOnly?: boolean
+  chatMode?: 'local' | 'groq' | 'readonly'
+  groqApiKey?: string
+  groqModel?: string
 }
 
 interface Attachment {
@@ -31,6 +35,7 @@ const MODE_LABEL: Record<string, string> = {
   repackage: '↻ Repackaged',
   miss: '✗ Fresh inference',
   local: '⬡ Local only',
+  groq: '⚡ Groq fallback',
 }
 
 function normalizeLatex(content: string): string {
@@ -76,7 +81,17 @@ function Markdown({ content }: { content: string }) {
   )
 }
 
-export default function Chat({ session, onUpdate, onCreditsEarned, temperature, localOnly, readOnly = false }: Props) {
+export default function Chat({
+  session,
+  onUpdate,
+  onCreditsEarned,
+  temperature,
+  localOnly,
+  readOnly = false,
+  chatMode = 'local',
+  groqApiKey = '',
+  groqModel = 'llama-3.1-8b-instant',
+}: Props) {
   // Local message state — updated per-token during streaming, synced to parent on completion
   const [msgs, setMsgs] = useState<LocalMessage[]>(session.messages)
   const [input, setInput] = useState('')
@@ -90,6 +105,8 @@ export default function Chat({ session, onUpdate, onCreditsEarned, temperature, 
   const messagesRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const isGroq = chatMode === 'groq'
+  const canAttach = chatMode === 'local'
 
   // Sync messages when switching to a different session
   useEffect(() => { setMsgs(session.messages) }, [session.id])
@@ -119,7 +136,7 @@ export default function Chat({ session, onUpdate, onCreditsEarned, temperature, 
   const openFilePicker = () => fileInputRef.current?.click()
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (readOnly) return
+    if (readOnly || !canAttach) return
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
@@ -214,6 +231,43 @@ export default function Chat({ session, onUpdate, onCreditsEarned, temperature, 
     if (isFirst) onUpdate({ ...session, title: newTitle, messages: [...msgs, userMsg] })
 
     try {
+      if (isGroq) {
+        if (!groqApiKey) throw new Error('Groq API key required')
+        const groqMessages: GroqChatMessage[] = [
+          {
+            role: 'system',
+            content: [
+              'You are a helpful assistant.',
+              'Use clear markdown.',
+              'For math, use $...$ for inline math and $$ blocks for display math.',
+              'Use fenced code blocks with language tags when writing code.',
+            ].join(' '),
+          },
+          ...history.map(m => ({ role: m.role, content: m.content })),
+          { role: 'user', content: prompt },
+        ]
+        const data = await groqChat({
+          apiKey: groqApiKey,
+          model: groqModel,
+          messages: groqMessages,
+          temperature,
+        })
+        const assistantMsg: LocalMessage = {
+          role: 'assistant',
+          content: data.content,
+          model: `groq:${data.model || groqModel}`,
+          mode: 'groq',
+          tokensIn: data.usage?.prompt_tokens,
+          tokensOut: data.usage?.completion_tokens,
+          toksPerSec: null,
+          published: false,
+        }
+        const finalMsgs = [...msgs, userMsg, assistantMsg]
+        setMsgs(finalMsgs)
+        onUpdate({ ...session, model: session.model.startsWith('groq:') ? session.model : `groq:${groqModel}`, title: newTitle, messages: finalMsgs })
+        return
+      }
+
       const r = await fetch(apiUrl('/api/ask/stream'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -306,19 +360,13 @@ export default function Chat({ session, onUpdate, onCreditsEarned, temperature, 
 
     setPublishingIdx(msgIdx)
     try {
-      const r = await fetch(apiUrl('/api/publish'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: userMsg.content,
-          response: msg.content,
-          model_used: session.model,
-          embedding: msg.embedding ?? [],
-          tags: [],
-        }),
+      const data = await publishMarketEntry({
+        prompt: userMsg.content,
+        response: msg.content,
+        modelUsed: msg.model ?? session.model,
+        embedding: msg.embedding ?? [],
+        tags: [],
       })
-      if (!r.ok) throw new Error(await r.text())
-      const data = await r.json()
       const earned: number = data.creditsEarned ?? 5
       const updated = msgs.map((m, i) => i === msgIdx ? { ...m, published: true } : m)
       setMsgs(updated)
@@ -528,8 +576,8 @@ export default function Chat({ session, onUpdate, onCreditsEarned, temperature, 
           <button
             className="attach-btn"
             onClick={openFilePicker}
-            disabled={readOnly || streaming || attachLoading}
-            title="Attach image (PNG/JPEG) or PDF"
+            disabled={readOnly || streaming || attachLoading || !canAttach}
+            title={canAttach ? 'Attach image (PNG/JPEG) or PDF' : 'Attachments require the local node'}
           >
             ⊕
           </button>
@@ -551,6 +599,8 @@ export default function Chat({ session, onUpdate, onCreditsEarned, temperature, 
             placeholder={
               readOnly
                 ? 'Local node offline — saved chat is read-only'
+                : isGroq
+                ? 'Ask with Groq fallback…'
                 : attachment
                 ? `Add a message for ${attachment.name}… (or press Enter)`
                 : 'Ask anything… (Enter to send, Shift+Enter for newline)'

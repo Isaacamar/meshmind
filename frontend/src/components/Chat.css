@@ -111,6 +111,7 @@
 .mode-verbatim { background: #0d2416; border: 1px solid #1a5c35; color: #3dba6c; }
 .mode-repackage { background: #2a2000; border: 1px solid #6b5200; color: #f0b429; }
 .mode-miss { background: #1e0e0e; border: 1px solid #5a1f1f; color: #e05c5c; }
+.mode-groq { background: #0d1f2a; border: 1px solid #1e5872; color: #38bdf8; }
 .mode-meta { font-weight: 400; color: #888; font-size: 0.75rem; }
 .mode-meta strong { color: #aaa; font-weight: 600; }
 

@@ -10,7 +10,7 @@ Running LLMs locally is cheap but slow and repetitive — thousands of people as
 
 MeshMind adds a shared, opt-in cache:
 
-1. You ask a question. Your local node **embeds it privately** (nothing leaves your machine yet).
+1. You ask a question. In local mode, your local node **embeds it privately** (nothing leaves your machine yet).
 2. The cloud returns semantically similar prompts others have published.
 3. One of three things happens:
    - **Verbatim hit** (similarity ≥ 0.90) — serve the cached answer, 0 inference tokens.
@@ -18,25 +18,26 @@ MeshMind adds a shared, opt-in cache:
    - **Miss** (< 0.70) — full local inference, and you can publish the result to earn credits.
 4. Authors earn credits every time their published answer gets consumed.
 
-Plaintext never leaves your machine unless **you** explicitly publish.
+Plaintext never leaves your machine unless **you** explicitly publish or choose the optional Groq web fallback. Account data and saved chat history are stored in the cloud so the public web app can log in and load prior chats without the local node running.
 
 ---
 
 ## Architecture
 
 ```
-┌─ LOCAL (your machine) ───────────────────────────────┐
+┌─ LOCAL (optional, your machine) ─────────────────────┐
 │  OpenClaw (FastAPI, :8000)                           │
 │   ├── Ollama client (embed + chat)                   │
-│   ├── Market client (auth + search + publish)        │
+│   ├── Market client (search + consume)               │
 │   └── /api/ask orchestrator                          │
 │  Ollama (:11434) — nomic-embed-text + chat model     │
 └──────────────────────────────────────────────────────┘
-          │  (JWT; embeddings for search; plaintext only on publish)
+          │  (embeddings for search; plaintext only on publish)
           ▼
-┌─ CLOUD (AWS/GCP) ────────────────────────────────────┐
-│  Spring Boot (:8080) — auth, marketplace, credits    │
-│  PostgreSQL 16 + pgvector — IVFFlat cosine index     │
+┌─ CLOUD (Render) ─────────────────────────────────────┐
+│  Spring Boot — auth, account, chats, marketplace     │
+│  PostgreSQL 16 + pgvector — HNSW cosine index        │
+│  Optional Groq proxy — user-provided key, not stored │
 └──────────────────────────────────────────────────────┘
 ```
 
@@ -44,7 +45,7 @@ Plaintext never leaves your machine unless **you** explicitly publish.
 
 ## Quick Start
 
-**Just want to use the app?** See [GETTING_STARTED.md](GETTING_STARTED.md) — you only need Python and Ollama.
+**Just want to use the app?** See [GETTING_STARTED.md](GETTING_STARTED.md). Login, account management, and saved chats work from the public web app. Local OpenClaw/Ollama enables privacy-first local inference; a user-provided Groq key enables full web-only chat.
 
 **Developer setup (self-host the backend):**
 
@@ -69,8 +70,9 @@ MESHMIND_CLOUD=http://localhost:8080 python3 local_node.py start
 | Local inference | Ollama (chat + `nomic-embed-text`) |
 | Local node | Python + FastAPI |
 | Cloud API | Spring Boot 3.x, Java 21 |
-| Vector search | PostgreSQL 16 + pgvector (IVFFlat, cosine) |
+| Vector search | PostgreSQL 16 + pgvector (HNSW, cosine) |
 | Auth | JWT + BCrypt |
+| Web fallback | Groq Chat Completions via Spring Boot proxy |
 | Container | Docker, docker-compose |
 
 ---
@@ -82,7 +84,9 @@ meshmind-v2/
 ├── backend/            # Spring Boot cloud service (Schertz)
 │   ├── src/main/java/dev/meshmind/
 │   │   ├── auth/       # JWT + register/login
-│   │   ├── user/       # User entity, /api/users/me
+│   │   ├── user/       # profile + account management
+│   │   ├── chat/       # cloud saved chats
+│   │   ├── groq/       # optional web fallback proxy
 │   │   ├── market/     # search / publish / consume / mine
 │   │   └── config/     # Security, JPA
 │   └── src/main/resources/schema.sql
@@ -110,19 +114,23 @@ meshmind-v2/
 | POST | `/api/auth/register` | no | create account |
 | POST | `/api/auth/login` | no | issue JWT |
 | GET | `/api/users/me` | yes | profile + credits |
+| PUT | `/api/users/me` | yes | update display name / password |
+| GET | `/api/chats` | yes | load saved chats |
+| POST | `/api/chats` | yes | save/update a chat |
+| DELETE | `/api/chats/{id}` | yes | delete a saved chat |
 | POST | `/api/market/search` | yes | top-k by embedding |
 | POST | `/api/market/publish` | yes | add entry, earn bonus |
 | POST | `/api/market/consume` | yes | record use, pay royalty |
 | GET | `/api/market/mine` | yes | own published entries |
+| POST | `/api/groq/chat` | yes | optional Groq fallback using caller's key |
 
 ### Local (FastAPI, `:8000`)
 
 | Method | Path | Purpose |
 |---|---|---|
-| POST | `/api/login`, `/api/register` | pass-through to cloud |
-| GET | `/api/me` | current user |
 | POST | `/api/ask` | embed → search → verbatim/repackage/miss |
-| POST | `/api/publish` | publish last answer |
+| POST | `/api/ask/stream` | streaming local chat |
+| POST | `/api/parse/pdf` | local PDF extraction |
 
 ---
 
@@ -130,8 +138,8 @@ meshmind-v2/
 
 The original MeshMind proposed peer query routing (send my prompt to your RTX 4090 via a WebSocket relay). That was cut. The marketplace replaces it with a stronger value proposition: **shared cache with attribution**, not borrowed hardware.
 
-- Cut: peer routing (F5), node heartbeat (F3), cloud conversation sync
-- Added: pgvector marketplace, credits ledger, three-mode ask orchestrator
+- Cut: peer routing (F5), node heartbeat (F3)
+- Added: pgvector marketplace, credits ledger, cloud chat history, Groq fallback, three-mode ask orchestrator
 - Kept: local-first inference, privacy contract, Spring Boot + Postgres stack, Docker
 - Future: agent mode (filesystem + terminal control) — see `docs/agent-mode.md`
 
@@ -141,9 +149,9 @@ The original MeshMind proposed peer query routing (send my prompt to your RTX 40
 
 | Milestone | Deliverable |
 |---|---|
-| **Now** | Auth, marketplace search/publish/consume, credits, demo UI |
-| **Next** | Streaming (SSE) in `/api/ask`, better repackage prompt, upvote/downvote |
-| **Demo** | Deploy cloud to AWS/GCP free tier; two-user end-to-end credit flow |
+| **Now** | Auth, account management, cloud saved chats, marketplace, local chat, optional Groq fallback |
+| **Next** | Upvote/downvote, stronger Java test coverage |
+| **Demo** | Render deployment; web-only login/history/Groq flow plus local privacy-first flow |
 | **Stretch** | Agent mode (read/write workspace files, run shell commands with approval) |
 
 ---

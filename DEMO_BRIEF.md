@@ -113,7 +113,7 @@ docker compose logs db       --tail=20
 | User profile + credits balance | Spring Boot `/api/users/me` |
 | Credits ledger (publish +5, consume royalty +1) | `credit_events` table |
 | Prompt embedding via nomic-embed-text | OpenClaw → Ollama |
-| Marketplace vector search (pgvector IVFFlat cosine) | Spring Boot `/api/market/search` |
+| Marketplace vector search (pgvector HNSW cosine) | Spring Boot `/api/market/search` |
 | Verbatim cache hit (similarity ≥ 0.90) — 0 inference tokens | OpenClaw orchestrator |
 | Repackage (0.70–0.90) — local model adapts cached answer | OpenClaw orchestrator |
 | Miss (< 0.70) — full local inference | OpenClaw → Ollama |
@@ -128,27 +128,30 @@ docker compose logs db       --tail=20
 | Per-message token stats (in/out/tok/s) | OpenClaw SSE done event |
 | Math rendering (KaTeX — `$...$` and `$$...$$`) | Frontend |
 | Syntax highlighting (One Dark) | Frontend |
-| Session persistence (localStorage) | Frontend |
+| Cloud saved chats | Spring Boot `/api/chats` + PostgreSQL `chats` table |
+| Browser-local chat import | Frontend uploads old `mm_sessions` to cloud on login |
+| Optional Groq fallback | Spring Boot `/api/groq/chat` proxy with user-provided key |
+| Session persistence cache | Frontend localStorage + cloud sync |
 | 21 unit tests for OpenClaw (server + ollama client) | `openclaw/tests/` |
 
 ### ⚠️ Known Gaps (for May 11 Final)
 | Gap | Priority | Notes |
 |---|---|---|
-| **Cloud deployment** | CRITICAL | Requirement: class must access via internet. Need AWS/GCP/Render |
+| **Cloud deployment** | DONE | Render backend, static frontend, and Postgres are deployed |
 | **Java backend unit tests** | HIGH | Requirement: 50% coverage by May 11. Currently 0 Java tests |
-| Account management (update profile/password) | Medium | Only register/login/credits exist |
+| Account management (update profile/password) | DONE | `PUT /api/users/me` + React profile page |
 | Upvote/downvote on entries | Low | Schema has columns, no endpoint |
-| JWT persisted across OpenClaw restart | Low | Token lost on restart; re-login required |
+| JWT persisted across OpenClaw restart | Low | Browser JWT works for cloud; local OpenClaw token is separate for local-only flows |
 
 ---
 
 ## 4. Architecture for the Presentation Slide
 
 ```
-┌─ YOUR LAPTOP ────────────────────────────────────────────────┐
+┌─ YOUR LAPTOP (optional local privacy mode) ──────────────────┐
 │                                                              │
-│  React UI (Vite, :3000)                                      │
-│    └── SSE streaming, multi-model, KaTeX, attachments        │
+│  React UI                                                     │
+│    └── multi-model, KaTeX, saved chats, Groq fallback         │
 │                                                              │
 │  OpenClaw (FastAPI, :8000)                         ◄─────────┼── User's browser
 │    ├── Embed prompt (nomic-embed-text via Ollama)            │
@@ -163,19 +166,22 @@ docker compose logs db       --tail=20
 │    ├── llava:13b         (vision)                            │
 │    └── qwen2.5-coder:14b (code)                              │
 └──────────────────────────────────────────────────────────────┘
-         │  JWT auth · embeddings only (no plaintext)
+         │  embeddings only for marketplace search
          ▼
-┌─ CLOUD (Docker) ─────────────────────────────────────────────┐
-│  Spring Boot (:8080)                                         │
+┌─ CLOUD (Render) ─────────────────────────────────────────────┐
+│  Spring Boot                                                  │
 │    ├── POST /api/auth/register|login   (JWT issue)           │
-│    ├── GET  /api/users/me              (profile + credits)   │
+│    ├── GET/PUT /api/users/me           (profile/account)     │
+│    ├── GET/POST /api/chats             (cloud saved chats)   │
 │    ├── POST /api/market/search         (top-k by embedding)  │
 │    ├── POST /api/market/publish        (earn +5 credits)     │
 │    ├── POST /api/market/consume        (author earns +1)     │
-│    └── GET  /api/market/mine           (my entries)          │
+│    ├── GET  /api/market/mine           (my entries)          │
+│    └── POST /api/groq/chat             (optional fallback)   │
 │                                                              │
 │  PostgreSQL 16 + pgvector                                    │
 │    ├── users          (auth, credits)                        │
+│    ├── chats          (saved chat history)                   │
 │    ├── market_entries (prompt, response, embedding vector)   │
 │    ├── credit_events  (full ledger)                          │
 │    └── consumptions   (attribution log)                      │
@@ -188,15 +194,15 @@ docker compose logs db       --tail=20
 
 **Setup before demo:** register an account, ask 2–3 questions and publish at least one answer. Have a second incognito window ready as a second user.
 
-1. **Open the UI** — show model selector, temperature slider, session list
-2. **Ask a fresh question** (anything) → show "Fresh inference" badge, tok/s, context bar
-3. **Publish the answer** → show +5 credits in the mode badge
-4. **Start a new chat, ask the same question** → show "Cached answer" badge, 0 inference tokens
-5. **Ask a slightly different version** → show "Repackaged" badge and similarity score
-6. **Attach an image** → switch to llava, show vision response
-7. **Ask a math question** → show KaTeX rendered equations
-8. **Open psql** in a terminal and show `SELECT * FROM market_entries` and `SELECT * FROM credit_events` live
-9. **Switch models mid-session** → show model separator pill in the chat
+1. **Open public UI with local node off** — log in, show profile/account, show saved cloud chats.
+2. **Open a saved chat** — explain it loads from Render/Postgres without OpenClaw.
+3. **Add Groq key** — start a new web-only chat and show `⚡ Groq fallback` badge.
+4. **Start local node** — show model selector populate from Ollama.
+5. **Ask a fresh local question** → show "Fresh inference" badge, tok/s, context bar.
+6. **Publish the answer** → show +5 credits.
+7. **Ask same/similar question** → show cached/repackaged marketplace behavior.
+8. **Attach image/PDF locally** → show OpenClaw-only attachment behavior.
+9. **Open psql or Render DB logs** and show `market_entries`, `credit_events`, and `chats`.
 
 ---
 
@@ -209,9 +215,11 @@ docker compose logs db       --tail=20
 | Docker for development | ✅ docker-compose.yml, all 4 services |
 | Non-CLI user interface | ✅ React + Vite frontend |
 | Persistent database | ✅ PostgreSQL 16 + pgvector |
-| Cloud hosted (class can access) | ❌ Not deployed yet — needed by May 11 |
 | User registration + login | ✅ JWT + BCrypt |
-| Basic profile + account management | ⚠️ Profile read-only; no password change |
+| Cloud hosted (class can access) | ✅ Render backend/static site/Postgres |
+| Basic profile + account management | ✅ Read/update display name and password |
+| Saved chats without local node | ✅ Cloud `chats` table + React read-only mode |
+| Fully web-usable chat | ✅ Optional Groq fallback |
 | GitHub PRs + code review | ✅ PR #31 (Amar) + PR #32 (Schertz), merged |
 | ≥75% features complete (Apr 20) | ✅ ~80% feature complete |
 | 25% unit test coverage (Apr 20) | ⚠️ 21 Python tests; 0 Java tests |
@@ -227,15 +235,15 @@ Paste this as your first message:
 
 > **Project:** MeshMind v2 — a privacy-first local AI network with a shared prompt marketplace.
 >
-> **Stack:** React/TypeScript frontend (Vite, port 3000) → OpenClaw FastAPI local node (port 8000) → Spring Boot 3.3 cloud backend (port 8080) → PostgreSQL 16 + pgvector. Local inference via Ollama (nomic-embed-text, llama3.2, llava, qwen2.5-coder).
+> **Stack:** React/TypeScript frontend (Vite, deployed as Render static site) → Spring Boot 3.3 cloud backend on Render → PostgreSQL 16 + pgvector. Optional local privacy mode uses OpenClaw FastAPI (port 8000) + Ollama (nomic-embed-text and local chat models). Optional web fallback uses Groq via a Spring Boot proxy with the user's own API key.
 >
 > **Team:** Isaac Amar (OpenClaw + frontend), Isaac Schertz (Spring Boot + DB). ECE366, Cooper Union, Spring 2026.
 >
-> **How it works:** User asks a question → OpenClaw embeds it locally via Ollama → sends *only the embedding* (no plaintext) to the cloud backend → backend does pgvector cosine search → returns top-k cached answers with similarity scores. If similarity ≥ 0.90: serve cached answer (0 inference tokens). If 0.70–0.90: local model rewrites cached answer (~10x fewer tokens). If < 0.70: full local inference. User can publish their answer to the marketplace and earn credits; authors earn a royalty every time their entry is consumed.
+> **How it works:** Login, account management, and saved chats work directly against the Render Spring Boot backend. In local mode, OpenClaw embeds prompts locally via Ollama and sends only embeddings to the marketplace; cached/repackaged/fresh responses are labeled in the UI. In web fallback mode, users can add a Groq key and generate replies from the public site without running OpenClaw. Users can explicitly publish local prompt/response pairs to earn marketplace credits.
 >
-> **Working features:** JWT auth, credits ledger, marketplace publish/search/consume, SSE streaming, multi-model chat, image+PDF attachments, temperature control, KaTeX math rendering, context fill bar, per-message token stats, 21 Python unit tests.
+> **Working features:** JWT auth, account management, cloud saved chats, credits ledger, marketplace publish/search/consume, SSE local streaming, optional Groq fallback, multi-model local chat, image+PDF local attachments, temperature control, KaTeX math rendering, context fill bar, per-message token stats, 21 Python unit tests.
 >
-> **Gaps to address before May 11:** (1) Cloud deployment — AWS/GCP/Render; (2) Java unit tests (need 50% coverage); (3) Optional: account profile update, upvote/downvote.
+> **Remaining gaps:** Java unit tests and optional upvote/downvote endpoints.
 >
 > **I need a 5–10 minute final presentation** covering: what we built, why it's interesting, architecture diagram, live demo plan, what's complete vs. what's left, and how it meets the ECE366 project requirements.
 

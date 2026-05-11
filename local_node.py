@@ -3,10 +3,10 @@
 MeshMind local node — cross-platform setup and launcher.
 Works on macOS, Linux, and Windows. Requires Python 3.10+.
 
-  python local_node.py           # first time: install deps + required model + start
-  python local_node.py install   # install deps and pull required model only
-  python local_node.py start     # start the node (assumes already set up)
-  python local_node.py models    # browse and pull extra models interactively
+  python3.13 local_node.py           # first time: install deps + required model + start
+  python3.13 local_node.py install   # install deps and pull required model only
+  python3.13 local_node.py start     # start the node (assumes already set up)
+  python3.13 local_node.py models    # browse and pull extra models interactively
 
 Environment variables (optional):
   MESHMIND_CLOUD=https://...   URL of the cloud backend (default: https://meshmind-g3am.onrender.com)
@@ -220,12 +220,12 @@ def cmd_install() -> None:
     setup_venv()
     install_embed()
     choose_chat_models()
-    print("\nSetup complete.  Run:  python local_node.py start")
+    print(f"\nSetup complete.  Run:  {os.path.basename(sys.executable)} local_node.py start")
 
 
 def cmd_start() -> None:
     if not os.path.isfile(_v("uvicorn")):
-        print("Not installed yet. Run:  python local_node.py install")
+        print(f"Not installed yet. Run:  {os.path.basename(sys.executable)} local_node.py install")
         sys.exit(1)
     if not check_ollama():
         sys.exit(1)

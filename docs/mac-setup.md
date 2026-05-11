@@ -72,7 +72,7 @@ uvicorn app.server:app --reload --port 8000
 | `OLLAMA_URL` | `http://localhost:11434` | Point the node at a remote Ollama (e.g. another machine) |
 | `MESHMIND_CHAT_MODEL` | `qwen2.5-coder:14b` | Default chat model |
 | `MESHMIND_EMBED_MODEL` | `nomic-embed-text` | Must stay 768-dim to match schema |
-| `MESHMIND_CLOUD` | `http://localhost:8080` | Cloud API base URL |
+| `MESHMIND_CLOUD` | `https://meshmind-g3am.onrender.com` | Cloud API base URL |
 
 ## Sanity checks
 
@@ -82,6 +82,8 @@ ollama ps                                       # see loaded model + context siz
 curl http://localhost:11434/api/tags | jq .
 curl http://localhost:8080/actuator/health 2>/dev/null
 ```
+
+The public Render app can log in, manage account details, load saved chats, and use Groq fallback without the local node. The local node is still required for privacy-first Ollama inference, local embeddings, image/PDF attachments, and marketplace search/repackage behavior.
 
 ## Mac-specific gotchas
 

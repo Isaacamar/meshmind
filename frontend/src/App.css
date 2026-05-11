@@ -219,6 +219,74 @@
 .toggle-btn.off { background: #2a3a4a; color: #6a7f96; }
 .toggle-btn:hover { opacity: 0.85; }
 
+.groq-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  background: #121b22;
+  border: 1px solid #22313d;
+  border-radius: 8px;
+  padding: 9px 10px;
+}
+.groq-settings-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.groq-settings label {
+  font-size: 0.72rem;
+  color: #93a6b5;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.groq-status {
+  color: #6a7f96;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+.groq-status.on { color: #6ee7b7; }
+.groq-settings select,
+.groq-key-row input {
+  background: #0d1117;
+  border: 1px solid #2a3a4a;
+  color: #dbeafe;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 0.78rem;
+  min-width: 0;
+}
+.groq-key-row {
+  display: flex;
+  gap: 6px;
+}
+.groq-key-row input { flex: 1; }
+.groq-key-row button,
+.groq-actions button {
+  background: #1a2f45;
+  border: 1px solid #2a4a66;
+  color: #9bdcff;
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.groq-actions {
+  display: flex;
+  gap: 6px;
+}
+.groq-actions button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.groq-key-row button:hover,
+.groq-actions button:hover:not(:disabled) {
+  border-color: #38bdf8;
+  background: #20394f;
+}
+
 .temp-slider-wrap { display: flex; flex-direction: column; gap: 4px; }
 
 .temp-slider-header {
